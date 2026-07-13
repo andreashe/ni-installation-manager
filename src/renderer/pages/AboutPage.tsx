@@ -1,7 +1,7 @@
 import React from 'react';
 
 /** Placeholder repository URL until a real project page exists (PLAN.md §4.5). */
-const PROJECT_URL = 'https://github.com/example/ni-installation-manager';
+const PROJECT_URL = 'https://github.com/andreashe/ni-installation-manager';
 
 /**
  * About page (PLAN.md §4.5): unofficial-status disclaimer, project link,
@@ -32,6 +32,9 @@ export function AboutPage() {
           The application modifies the Windows registry and deletes files. It is provided
           &quot;as is&quot;, without guarantees of any kind. Always keep backups; enable the
           built-in backup option in Preferences before uninstalling.
+        </p>
+        <p>
+          Warning: Do not use it to uninstall drivers. It is just made for instruments.
         </p>
 
         <h2>Source &amp; license</h2>

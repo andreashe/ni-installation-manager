@@ -5,12 +5,12 @@ Where the running app stores its own files. Everything lives in the Electron **`
 ## Base folder
 
 ```
-%APPDATA%\ni-installation-manager
+%APPDATA%\NI Installation Manager
 ```
 
-resolved: `C:\Users\<user>\AppData\Roaming\ni-installation-manager`
+resolved: `C:\Users\<user>\AppData\Roaming\NI Installation Manager`
 
-This is `app.getPath('userData')`; the folder name comes from `productName` in `package.json`. Same location in dev mode (`npm start`) and in the packaged app. Paste `%APPDATA%\ni-installation-manager` into the Explorer address bar to open it.
+This is `app.getPath('userData')`; the folder name comes from `productName` in `package.json`. Same location in dev mode (`npm start`) and in the packaged app. Paste `%APPDATA%\NI Installation Manager` into the Explorer address bar to open it.
 
 ## Files and folders
 
@@ -32,7 +32,7 @@ The base folder also contains folders Electron/Chromium creates itself (`Cache`,
 
 ## Quick debugging recipes
 
-- Inspect current settings: open `%APPDATA%\ni-installation-manager\settings.json`.
-- Follow the log live: `Get-Content "$env:APPDATA\ni-installation-manager\logs\ni-installation-manager.log" -Tail 50 -Wait` (PowerShell).
+- Inspect current settings: open `%APPDATA%\NI Installation Manager\settings.json`.
+- Follow the log live: `Get-Content "$env:APPDATA\NI Installation Manager\logs\ni-installation-manager.log" -Tail 50 -Wait` (PowerShell).
 - Elevated job failed? Check the matching `uninstall-jobs\<mode>-<timestamp>\` folder: `job.json` shows what was requested, `progress.jsonl` what the worker did, plus the worker's own log in `logs\`.
 - Full reset: quit the app and delete the whole base folder — settings, patterns, logs and caches are recreated with defaults on next start.

@@ -124,5 +124,5 @@ See [`docs/project-structure.md`](./docs/project-structure.md) for current folde
   - git add
   - git commit
 - if moving files, use git mv
-
+- do not create tags
 - Claude code was already started in project folder, not cd into it required.

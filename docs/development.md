@@ -44,7 +44,7 @@ Native addons cannot be bundled by Vite, so they follow a special path through p
 - `forge.config.ts` sets a custom `packagerConfig.ignore` because the Vite plugin's default ignore drops `node_modules` entirely — that was the cause of the packaged-app crash `Cannot find module 'native-reg'`.
 - `AutoUnpackNativesPlugin` extracts `*.node` binaries to `app.asar.unpacked/` since native addons cannot load from inside an asar archive.
 
-When adding another native module: add it to `"dependencies"`, to `external` in `vite.main.config.ts`, and to `externalNativeModules` in `forge.config.ts`. Verify with `npm run package` followed by launching `out/ni-installation-manager-win32-x64/ni-installation-manager.exe`.
+When adding another native module: add it to `"dependencies"`, to `external` in `vite.main.config.ts`, and to `externalNativeModules` in `forge.config.ts`. Verify with `npm run package` followed by launching `out/NI Installation Manager-win32-x64/NI Installation Manager.exe`.
 
 ## Releases (CI)
 
