@@ -26,6 +26,21 @@ export function getLogFilePath(): string {
   return path.join(getLogFolderPath(), 'ni-installation-manager.log');
 }
 
+/** Log file of the elevated uninstall worker. */
+export function getUninstallWorkerLogFilePath(): string {
+  return path.join(getLogFolderPath(), 'uninstall-worker.log');
+}
+
+/** Log file of the elevated restore worker. */
+export function getRestoreWorkerLogFilePath(): string {
+  return path.join(getLogFolderPath(), 'restore-worker.log');
+}
+
+/** Log file of the elevated move worker. */
+export function getMoveWorkerLogFilePath(): string {
+  return path.join(getLogFolderPath(), 'move-worker.log');
+}
+
 /**
  * Frontend assets cache: product artwork found on disk is copied here so
  * the renderer can display it (see `ArtworkCacheService`, PLAN.md §2.3).

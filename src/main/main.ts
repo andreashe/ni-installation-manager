@@ -29,14 +29,19 @@ const isRestoreWorker = process.argv.includes(CLI_FLAG_RESTORE_WORKER);
 const isMoveWorker = process.argv.includes(CLI_FLAG_MOVE_WORKER);
 const isWorker = isUninstallWorker || isRestoreWorker || isMoveWorker;
 if (isWorker) {
-  void app.whenReady().then(async () => {
-    const exitCode = isUninstallWorker
-      ? await runUninstallWorker(process.argv)
-      : isRestoreWorker
-        ? await runRestoreWorker(process.argv)
-        : await runMoveWorker(process.argv);
-    app.exit(exitCode);
-  });
+  void app
+    .whenReady()
+    .then(async () => {
+      const exitCode = isUninstallWorker
+        ? await runUninstallWorker(process.argv)
+        : isRestoreWorker
+          ? await runRestoreWorker(process.argv)
+          : await runMoveWorker(process.argv);
+      app.exit(exitCode);
+    })
+    // Safety net: a worker must never hang the elevated process — the main
+    // app waits on its exit code (3 = crashed outside the worker's own guard).
+    .catch(() => app.exit(3));
 }
 
 // Privileged scheme registration must happen before 'ready'.

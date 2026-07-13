@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CLI_ARG_JOB_FILE_PREFIX } from '../../config/default.config';
-import { getLogFolderPath } from '../../config/paths';
+import { getUninstallWorkerLogFilePath } from '../../config/paths';
+import { errorDetail, errorMessage } from '../utils/error-message';
 import { BackupService } from '../services/BackupService';
 import { LoggerService } from '../services/LoggerService';
 import { RegistryService } from '../services/RegistryService';
@@ -28,9 +29,17 @@ export async function runUninstallWorker(cliArgs: readonly string[]): Promise<nu
   const jobFile = jobFileArg.slice(CLI_ARG_JOB_FILE_PREFIX.length);
   const progressFile = path.join(path.dirname(jobFile), 'progress.jsonl');
 
-  /** Append one protocol event; also the sink for all worker console output. */
+  /**
+   * Append one protocol event; also the sink for all worker console output.
+   * Never throws — a broken progress file must not kill the job, and the
+   * worker log still carries the full story.
+   */
   const emit = (event: object): void => {
-    fs.appendFileSync(progressFile, `${JSON.stringify(event)}\n`, 'utf8');
+    try {
+      fs.appendFileSync(progressFile, `${JSON.stringify(event)}\n`, 'utf8');
+    } catch {
+      // Progress reporting is best-effort; the worker log is the fallback.
+    }
   };
 
   // First sign of life as early as possible: the elevated Electron instance
@@ -39,9 +48,8 @@ export async function runUninstallWorker(cliArgs: readonly string[]): Promise<nu
   emit({ type: 'line', text: `Elevated worker started (pid ${process.pid})` });
 
   const logger = new LoggerService();
-  logger.initializeFileSink(path.join(getLogFolderPath(), 'uninstall-worker.log'));
-
   try {
+    logger.initializeFileSink(getUninstallWorkerLogFilePath());
     const spec = JSON.parse(await fs.promises.readFile(jobFile, 'utf8')) as UninstallJobSpec;
     emit({ type: 'line', text: `Executing uninstall job: ${spec.products.length} product(s)` });
 
@@ -67,9 +75,10 @@ export async function runUninstallWorker(cliArgs: readonly string[]): Promise<nu
     emit({ type: 'done', success: true });
     return 0;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    emit({ type: 'done', success: false, error: message });
-    logger.error(`Worker failed: ${message}`, 'UninstallWorker');
+    // The message travels through the progress file into the UI + main log;
+    // the full stack goes to the worker's own log file.
+    emit({ type: 'done', success: false, error: errorMessage(error) });
+    logger.error(`Worker failed: ${errorDetail(error)}`, 'UninstallWorker');
     return 1;
   }
 }

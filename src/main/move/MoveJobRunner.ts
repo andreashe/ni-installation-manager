@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { UninstallProgressReporter } from '../uninstall/uninstall-job';
+import { errorMessage } from '../utils/error-message';
 import { deviceRoot } from '../utils/fs-size';
 import type { RegistryGuard } from '../utils/RegistryGuard';
 import type { MoveJobSpec, MoveProductSpec } from './move-job';
@@ -69,7 +70,14 @@ export class MoveJobRunner {
 
     for (const entry of product.entries) {
       this.reporter.line(`Moving ${entry.sourcePath} → ${entry.targetPath} (${entry.kind})`);
-      await this.moveEntry(entry.sourcePath, entry.targetPath);
+      try {
+        await this.moveEntry(entry.sourcePath, entry.targetPath);
+      } catch (error) {
+        // Name the exact move that failed — the bare fs error often lacks it.
+        throw new Error(
+          `${product.name}: moving ${entry.sourcePath} → ${entry.targetPath} failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
 
@@ -77,7 +85,13 @@ export class MoveJobRunner {
     for (const keyPath of registryKeyPaths) {
       const values = product.registryUpdates[keyPath];
       this.reporter.line(`Updating registry key HKLM\\${keyPath} (${values.length} value(s))`);
-      await this.registryGuard.restoreKeyValues(keyPath, values);
+      try {
+        await this.registryGuard.restoreKeyValues(keyPath, values);
+      } catch (error) {
+        throw new Error(
+          `${product.name}: updating registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
   }

@@ -234,6 +234,38 @@ describe('UninstallJobRunner', () => {
     expect(reporter.lines.some((l) => l.includes('backup only'))).toBe(true);
   });
 
+  it('failed disk deletion names product, path and kind in the error', async () => {
+    const { runner, fsGuard } = makeRunner();
+    fsGuard.deleteFolder.mockRejectedValue(new Error('EPERM: operation not permitted'));
+    await expect(runner.run(spec({}))).rejects.toThrow(
+      'Super 8: removing D:\\Content\\Super 8 (ContentDir) failed — EPERM: operation not permitted',
+    );
+  });
+
+  it('failed registry deletion names product and key path in the error', async () => {
+    const { runner, registryGuard } = makeRunner();
+    registryGuard.deleteKeyTree.mockRejectedValue(new Error('access denied'));
+    await expect(runner.run(spec({}))).rejects.toThrow(
+      'Super 8: removing registry key HKLM\\SOFTWARE\\WOW6432Node\\Native Instruments\\Super 8 failed — access denied',
+    );
+  });
+
+  it('failed backup copy names product, path and kind in the error', async () => {
+    const { runner, backupService } = makeRunner();
+    backupService.backupDiskPath.mockRejectedValue(new Error('disk full'));
+    await expect(
+      runner.run(spec({ backupEnabled: true, backupFolder: 'D:\\Backup' })),
+    ).rejects.toThrow('Super 8: backing up D:\\Content\\Super 8 (ContentDir) failed — disk full');
+  });
+
+  it('failed registry/description backup names the product in the error', async () => {
+    const { runner, backupService } = makeRunner();
+    backupService.backupRegistry.mockRejectedValue(new Error('write failed'));
+    await expect(
+      runner.run(spec({ backupEnabled: true, backupFolder: 'D:\\Backup' })),
+    ).rejects.toThrow('Super 8: backing up registry entries/description failed — write failed');
+  });
+
   it('copies the cached artwork as product.png during backup (TODO7)', async () => {
     const { runner, backupService } = makeRunner();
     const jobSpec = spec({ backupEnabled: true, backupFolder: 'D:\\Backup' });

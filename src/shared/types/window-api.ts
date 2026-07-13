@@ -93,6 +93,10 @@ export interface WindowApi {
     clear(): Promise<void>;
     /** Subscribe to the live stream of log entries written by the central logger. */
     onEntry(listener: (entry: LogEntry) => void): Unsubscribe;
+    /** List the log file names in the log folder (log panel file tabs). */
+    getFiles(): Promise<string[]>;
+    /** Read the tail of one log file by name; empty string for unknown/unreadable files. */
+    readFile(fileName: string): Promise<string>;
   };
 }
 

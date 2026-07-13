@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { isBackupOnlyKind } from '../../shared/types/product';
+import { errorMessage } from '../utils/error-message';
 import type { BackupService } from '../services/BackupService';
 import type { FsGuard } from '../utils/FsGuard';
 import type { RegistryGuard } from '../utils/RegistryGuard';
@@ -92,18 +93,30 @@ export class UninstallJobRunner {
     }
     for (const diskPath of product.diskPaths) {
       this.reporter.line(`Backing up ${diskPath.resolvedPath} (${diskPath.kind})`);
-      await this.backupService.backupDiskPath(
-        product.name,
-        diskPath.kind,
-        diskPath.resolvedPath,
-        spec.backupFolder,
-      );
+      try {
+        await this.backupService.backupDiskPath(
+          product.name,
+          diskPath.kind,
+          diskPath.resolvedPath,
+          spec.backupFolder,
+        );
+      } catch (error) {
+        throw new Error(
+          `${product.name}: backing up ${diskPath.resolvedPath} (${diskPath.kind}) failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
     this.reporter.line(`Backing up registry entries + description of ${product.name}`);
-    await this.backupService.backupRegistry(product, spec.backupFolder);
-    await this.backupService.writeBackupDescription(product, spec.backupFolder);
-    await this.backupService.backupProductImage(product, spec.backupFolder);
+    try {
+      await this.backupService.backupRegistry(product, spec.backupFolder);
+      await this.backupService.writeBackupDescription(product, spec.backupFolder);
+      await this.backupService.backupProductImage(product, spec.backupFolder);
+    } catch (error) {
+      throw new Error(
+        `${product.name}: backing up registry entries/description failed — ${errorMessage(error)}`,
+      );
+    }
     this.reporter.stepDone();
   }
 
@@ -122,10 +135,17 @@ export class UninstallJobRunner {
       }
       const isDirectory = await isDir(diskPath.resolvedPath);
       this.reporter.line(`Removing ${diskPath.resolvedPath} (${diskPath.kind})`);
-      if (isDirectory) {
-        await this.fsGuard.deleteFolder(diskPath.resolvedPath);
-      } else {
-        await this.fsGuard.deleteFile(diskPath.resolvedPath);
+      try {
+        if (isDirectory) {
+          await this.fsGuard.deleteFolder(diskPath.resolvedPath);
+        } else {
+          await this.fsGuard.deleteFile(diskPath.resolvedPath);
+        }
+      } catch (error) {
+        // Name the exact path that failed — the bare fs error often lacks it.
+        throw new Error(
+          `${product.name}: removing ${diskPath.resolvedPath} (${diskPath.kind}) failed — ${errorMessage(error)}`,
+        );
       }
       this.reporter.stepDone();
     }
@@ -135,7 +155,13 @@ export class UninstallJobRunner {
   private async removeRegistryKeys(product: UninstallProductSpec): Promise<void> {
     for (const keyPath of product.registryKeyPaths) {
       this.reporter.line(`Removing registry key HKLM\\${keyPath}`);
-      await this.registryGuard.deleteKeyTree(keyPath);
+      try {
+        await this.registryGuard.deleteKeyTree(keyPath);
+      } catch (error) {
+        throw new Error(
+          `${product.name}: removing registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
   }

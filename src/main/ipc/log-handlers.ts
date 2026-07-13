@@ -13,6 +13,13 @@ import type { AppContext } from '../app-context';
 export function registerLogHandlers(context: AppContext): void {
   ipcMain.handle(IpcChannels.log.clear, () => context.logger.clearLogFiles());
 
+  // Log panel file tabs: list the .log files and read one file's tail.
+  // File names are validated inside LoggerService (known basenames only).
+  ipcMain.handle(IpcChannels.log.files, () => context.logger.listLogFiles());
+  ipcMain.handle(IpcChannels.log.read, (_event, fileName: unknown) =>
+    context.logger.readLogFile(String(fileName)),
+  );
+
   ipcMain.on(
     IpcChannels.log.fromRenderer,
     (_event, level: unknown, message: unknown, source: unknown) => {

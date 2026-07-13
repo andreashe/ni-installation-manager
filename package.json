@@ -1,7 +1,7 @@
 {
   "name": "ni-installation-manager",
   "productName": "NI Installation Manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Unofficial manager to inspect and uninstall Native Instruments products (Windows)",
   "main": ".vite/build/main.js",
   "private": true,

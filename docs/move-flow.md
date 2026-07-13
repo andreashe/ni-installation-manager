@@ -31,7 +31,7 @@ Spec building (`src/main/move/move-job.ts`): `toMoveProductSpec` works on `Produ
 |---|---|
 | dry-run active | `MoveJobRunner` in-process; only logs `DRY-RUN: would move …` |
 | app already elevated | runner in-process, real moves |
-| not elevated | job spec written to `userData/uninstall-jobs/move-<ts>/job.json`; `ElevationService` relaunches the app as elevated **move worker** (`--move-worker --job-file=…`); worker streams JSONL into `progress.jsonl`, tailed via `utils/jsonl-tail.ts` |
+| not elevated | job spec written to `userData/uninstall-jobs/move-<ts>/job.json`; `ElevationService` relaunches the app as elevated **move worker** (`--move-worker --job-file=…`); worker streams JSONL into `progress.jsonl`, tailed via `utils/jsonl-tail.ts` and translated by the shared `WorkerProgressTracker` (`utils/worker-progress.ts`) into job store updates + central log entries (source `MoveWorker`); on a non-zero exit the service throws the worker-reported error, not just the exit code (see the failure-diagnostics note in [uninstall-flow.md](./uninstall-flow.md)) |
 
 **Steps per product** (accounting in `computeMoveTotalSteps`): one step per move entry — fast `fs.rename` where possible, copy + delete-source as fallback (cross-device, existing target; targets overwritten/merged) — then, ONLY after all file moves of the product succeeded, one step per changed registry key (`RegistryGuard.restoreKeyValues`, dry-run aware), so a failed move never leaves the registry pointing at unmoved locations. Before the first move a **per-device free-space check** runs; only CROSS-device entries count (a same-device move is a rename and needs no space). Skippable via the "Ignore space check for move" setting (`ignoreMoveSpaceCheck`).
 

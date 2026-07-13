@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CLI_ARG_JOB_FILE_PREFIX } from '../../config/default.config';
-import { getLogFolderPath } from '../../config/paths';
+import { getMoveWorkerLogFilePath } from '../../config/paths';
+import { errorDetail, errorMessage } from '../utils/error-message';
 import { LoggerService } from '../services/LoggerService';
 import { RegistryService } from '../services/RegistryService';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -28,18 +29,24 @@ export async function runMoveWorker(cliArgs: readonly string[]): Promise<number>
   const jobFile = jobFileArg.slice(CLI_ARG_JOB_FILE_PREFIX.length);
   const progressFile = path.join(path.dirname(jobFile), 'progress.jsonl');
 
-  /** Append one protocol event; also the sink for all worker console output. */
+  /**
+   * Append one protocol event; also the sink for all worker console output.
+   * Never throws — see uninstall-worker.ts.
+   */
   const emit = (event: object): void => {
-    fs.appendFileSync(progressFile, `${JSON.stringify(event)}\n`, 'utf8');
+    try {
+      fs.appendFileSync(progressFile, `${JSON.stringify(event)}\n`, 'utf8');
+    } catch {
+      // Progress reporting is best-effort; the worker log is the fallback.
+    }
   };
 
   // First sign of life as early as possible (see uninstall-worker.ts).
   emit({ type: 'line', text: `Elevated move worker started (pid ${process.pid})` });
 
   const logger = new LoggerService();
-  logger.initializeFileSink(path.join(getLogFolderPath(), 'move-worker.log'));
-
   try {
+    logger.initializeFileSink(getMoveWorkerLogFilePath());
     const spec = JSON.parse(await fs.promises.readFile(jobFile, 'utf8')) as MoveJobSpec;
     emit({ type: 'line', text: `Executing move job: ${spec.products.length} product(s)` });
 
@@ -61,9 +68,9 @@ export async function runMoveWorker(cliArgs: readonly string[]): Promise<number>
     emit({ type: 'done', success: true });
     return 0;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    emit({ type: 'done', success: false, error: message });
-    logger.error(`Move worker failed: ${message}`, 'MoveWorker');
+    // Message → progress file → UI + main log; full stack → worker log.
+    emit({ type: 'done', success: false, error: errorMessage(error) });
+    logger.error(`Move worker failed: ${errorDetail(error)}`, 'MoveWorker');
     return 1;
   }
 }

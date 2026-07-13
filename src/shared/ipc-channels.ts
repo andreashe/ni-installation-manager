@@ -78,5 +78,9 @@ export const IpcChannels = {
     clear: 'log:clear',
     /** Push (send): main streams every written log entry to the renderer log panel. */
     entry: 'log:entry',
+    /** Command (invoke): list the log file names for the log panel's file tabs. */
+    files: 'log:files',
+    /** Command (invoke): read the tail of one log file (by name) for the log panel. */
+    read: 'log:read',
   },
 } as const;

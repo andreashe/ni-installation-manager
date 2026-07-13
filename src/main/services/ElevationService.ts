@@ -4,6 +4,27 @@ import type { LoggerService } from './LoggerService';
 const LOG_SOURCE = 'ElevationService';
 
 /**
+ * Build the PowerShell command that launches the worker elevated.
+ * Exported for unit tests.
+ *
+ * Two quoting layers are required:
+ * - single quotes make each piece a PowerShell string literal (embedded
+ *   single quotes doubled);
+ * - additional embedded double quotes around every argument, because
+ *   `Start-Process` joins `-ArgumentList` with spaces WITHOUT quoting —
+ *   without them an argument like the job-file path under
+ *   `%APPDATA%\NI Installation Manager\…` arrives split at every space
+ *   in the worker's argv.
+ */
+export function buildElevatedWorkerCommand(exePath: string, workerArgs: string[]): string {
+  const quotedArgs = workerArgs.map((arg) => `'"${arg.replace(/'/g, "''")}"'`).join(',');
+  return (
+    `$p = Start-Process -FilePath '${exePath.replace(/'/g, "''")}'` +
+    ` -ArgumentList @(${quotedArgs}) -Verb RunAs -PassThru -Wait; exit $p.ExitCode`
+  );
+}
+
+/**
  * Administrator-rights handling for real uninstall jobs (PLAN.md §3.4):
  * HKLM writes and Program Files deletions need elevation. The app itself
  * runs unelevated; a whole uninstall job is executed by a relaunched,
@@ -33,10 +54,7 @@ export class ElevationService {
    */
   runWorkerElevated(workerArgs: string[]): Promise<number> {
     // -PassThru + -Wait: propagate the worker's real exit code back out.
-    const quotedArgs = workerArgs.map((arg) => `'${arg.replace(/'/g, "''")}'`).join(',');
-    const command =
-      `$p = Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}'` +
-      ` -ArgumentList @(${quotedArgs}) -Verb RunAs -PassThru -Wait; exit $p.ExitCode`;
+    const command = buildElevatedWorkerCommand(process.execPath, workerArgs);
 
     this.logger.info('Requesting elevation for uninstall worker (UAC prompt)', LOG_SOURCE);
 

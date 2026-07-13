@@ -12,11 +12,10 @@ import {
   toRestoreProductSpec,
 } from '../restore/restore-job';
 import type { RestoreJobSpec } from '../restore/restore-job';
+import { getRestoreWorkerLogFilePath } from '../../config/paths';
 import type { RenamePattern } from '../../shared/types/restore';
-import type {
-  UninstallProgressEvent,
-  UninstallProgressReporter,
-} from '../uninstall/uninstall-job';
+import type { UninstallProgressReporter } from '../uninstall/uninstall-job';
+import { describeWorkerExit, WorkerProgressTracker } from '../utils/worker-progress';
 import type { BackupProduct } from '../models/BackupProduct';
 import type { RestoreStore } from '../stores/RestoreStore';
 import type { SettingsStore } from '../stores/SettingsStore';
@@ -150,9 +149,17 @@ export class RestoreService {
     workerArgs.push(CLI_FLAG_RESTORE_WORKER, `${CLI_ARG_JOB_FILE_PREFIX}${jobFile}`);
 
     this.jobStore.addLine('Waiting for administrator approval (UAC)…');
+    // Tracker mirrors worker lines into job store + main log and remembers
+    // the worker-reported error for the failure message below.
+    const tracker = new WorkerProgressTracker(
+      this.jobStore,
+      this.logger,
+      'RestoreWorker',
+      () => undefined, // nothing to remove from any list on restore
+    );
     const stopTailing = tailJsonlFile(
       progressFile,
-      (line) => this.applyProgressEvent(line),
+      (line) => tracker.apply(line),
       (seconds) =>
         this.jobStore.addLine(
           `…still waiting for the elevated worker to start (${seconds}s — UAC confirmation + worker startup)`,
@@ -163,36 +170,12 @@ export class RestoreService {
       // Give the tail one final pass so late lines are not lost.
       await delay(PROGRESS_POLL_MS * 2);
       if (exitCode !== 0) {
-        throw new Error(`Restore worker exited with code ${exitCode}`);
+        throw new Error(
+          describeWorkerExit('Restore', exitCode, tracker.lastError, getRestoreWorkerLogFilePath()),
+        );
       }
     } finally {
       stopTailing();
-    }
-  }
-
-  /** Parse one JSONL progress line from the worker. Malformed lines are surfaced verbatim. */
-  private applyProgressEvent(rawLine: string): void {
-    let event: UninstallProgressEvent;
-    try {
-      event = JSON.parse(rawLine) as UninstallProgressEvent;
-    } catch {
-      this.jobStore.addLine(rawLine);
-      return;
-    }
-    switch (event.type) {
-      case 'line':
-        this.jobStore.addLine(event.text);
-        break;
-      case 'step':
-        this.jobStore.stepDone();
-        break;
-      case 'product-done':
-        break; // nothing to remove from any list on restore
-      case 'done':
-        if (!event.success && event.error) {
-          this.jobStore.addLine(`ERROR: ${event.error}`);
-        }
-        break;
     }
   }
 }

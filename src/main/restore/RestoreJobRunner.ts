@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { UninstallProgressReporter } from '../uninstall/uninstall-job';
+import { errorMessage } from '../utils/error-message';
 import { deviceRoot } from '../utils/fs-size';
 import type { RegistryGuard } from '../utils/RegistryGuard';
 import type { RestoreJobSpec, RestoreProductSpec } from './restore-job';
@@ -71,15 +72,28 @@ export class RestoreJobRunner {
 
     for (const entry of product.entries) {
       this.reporter.line(`Restoring ${entry.backupPath} → ${entry.targetPath} (${entry.kind})`);
-      await fs.promises.mkdir(path.dirname(entry.targetPath), { recursive: true });
-      await fs.promises.cp(entry.backupPath, entry.targetPath, { recursive: true, force: true });
+      try {
+        await fs.promises.mkdir(path.dirname(entry.targetPath), { recursive: true });
+        await fs.promises.cp(entry.backupPath, entry.targetPath, { recursive: true, force: true });
+      } catch (error) {
+        // Name the exact copy that failed — the bare fs error often lacks it.
+        throw new Error(
+          `${product.name}: restoring ${entry.backupPath} → ${entry.targetPath} failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
 
     for (const keyPath of registryKeyPaths) {
       const values = product.registryEntries[keyPath];
       this.reporter.line(`Restoring registry key HKLM\\${keyPath} (${values.length} value(s))`);
-      await this.registryGuard.restoreKeyValues(keyPath, values);
+      try {
+        await this.registryGuard.restoreKeyValues(keyPath, values);
+      } catch (error) {
+        throw new Error(
+          `${product.name}: restoring registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+        );
+      }
       this.reporter.stepDone();
     }
   }

@@ -24,6 +24,8 @@ Run the installer, then launch "NI Installation Manager" from the Start menu.
 
 >Warning: Do not use it to uninstall drivers. It is just made for instruments.
 
+>INFO: Sophos Anti-Virus may flag this tool as a virus after admin rights are granted. Just can tell you, it is built here at github with the sources you see and there is no trick.
+
 ## Development
 
 See [`docs/development.md`](./docs/development.md) for setup, running in dev mode, tests, and packaging. Architecture and design docs: [`docs/`](./docs/).

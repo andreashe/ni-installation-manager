@@ -5,15 +5,12 @@ import {
   CLI_ARG_JOB_FILE_PREFIX,
   CLI_FLAG_UNINSTALL_WORKER,
 } from '../../config/default.config';
-import { getFrontendAssetsCachePath } from '../../config/paths';
+import { getFrontendAssetsCachePath, getUninstallWorkerLogFilePath } from '../../config/paths';
 import type { JobMode } from '../../shared/types/uninstall';
 import { UninstallJobRunner } from '../uninstall/UninstallJobRunner';
 import { computeTotalSteps, toProductSpec } from '../uninstall/uninstall-job';
-import type {
-  UninstallJobSpec,
-  UninstallProgressEvent,
-  UninstallProgressReporter,
-} from '../uninstall/uninstall-job';
+import type { UninstallJobSpec, UninstallProgressReporter } from '../uninstall/uninstall-job';
+import { describeWorkerExit, WorkerProgressTracker } from '../utils/worker-progress';
 import type { Product } from '../models/Product';
 import type { ProductStore } from '../stores/ProductStore';
 import type { SettingsStore } from '../stores/SettingsStore';
@@ -165,60 +162,30 @@ export class UninstallService {
     workerArgs.push(CLI_FLAG_UNINSTALL_WORKER, `${CLI_ARG_JOB_FILE_PREFIX}${jobFile}`);
 
     this.jobStore.addLine('Waiting for administrator approval (UAC)…');
-    const stopTailing = this.tailProgressFile(progressFile, spec);
-    try {
-      const exitCode = await this.elevationService.runWorkerElevated(workerArgs);
-      // Give the tail one final pass so late lines are not lost.
-      await delay(PROGRESS_POLL_MS * 2);
-      if (exitCode !== 0) {
-        throw new Error(`Uninstall worker exited with code ${exitCode}`);
-      }
-    } finally {
-      stopTailing();
-    }
-  }
-
-  /**
-   * Poll the worker's JSONL progress file and translate events into job
-   * store updates (shared tail helper, see `utils/jsonl-tail.ts`).
-   * Returns a stop function.
-   */
-  private tailProgressFile(progressFile: string, spec: UninstallJobSpec): () => void {
-    return tailJsonlFile(
+    // Tracker mirrors worker lines into job store + main log and remembers
+    // the worker-reported error for the failure message below.
+    const tracker = new WorkerProgressTracker(this.jobStore, this.logger, 'UninstallWorker', (name) =>
+      this.onProductDone(name, spec),
+    );
+    const stopTailing = tailJsonlFile(
       progressFile,
-      (line) => this.applyProgressEvent(line, spec),
+      (line) => tracker.apply(line),
       (seconds) =>
         this.jobStore.addLine(
           `…still waiting for the elevated worker to start (${seconds}s — UAC confirmation + worker startup)`,
         ),
     );
-  }
-
-  /** Parse one JSONL progress line from the worker. Malformed lines are surfaced verbatim. */
-  private applyProgressEvent(rawLine: string, spec: UninstallJobSpec): void {
-    let event: UninstallProgressEvent;
     try {
-      event = JSON.parse(rawLine) as UninstallProgressEvent;
-    } catch {
-      this.jobStore.addLine(rawLine);
-      return;
-    }
-    switch (event.type) {
-      case 'line':
-        this.jobStore.addLine(event.text);
-        break;
-      case 'step':
-        this.jobStore.stepDone();
-        break;
-      case 'product-done':
-        this.onProductDone(event.name, spec);
-        break;
-      case 'done':
-        // Exit code handling in runElevated decides success; lines only here.
-        if (!event.success && event.error) {
-          this.jobStore.addLine(`ERROR: ${event.error}`);
-        }
-        break;
+      const exitCode = await this.elevationService.runWorkerElevated(workerArgs);
+      // Give the tail one final pass so late lines are not lost.
+      await delay(PROGRESS_POLL_MS * 2);
+      if (exitCode !== 0) {
+        throw new Error(
+          describeWorkerExit('Uninstall', exitCode, tracker.lastError, getUninstallWorkerLogFilePath()),
+        );
+      }
+    } finally {
+      stopTailing();
     }
   }
 

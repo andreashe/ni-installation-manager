@@ -94,6 +94,9 @@ const api: WindowApi = {
     clear: (): Promise<void> => ipcRenderer.invoke(IpcChannels.log.clear),
     onEntry: (listener: (entry: LogEntry) => void): Unsubscribe =>
       subscribe(IpcChannels.log.entry, listener),
+    getFiles: (): Promise<string[]> => ipcRenderer.invoke(IpcChannels.log.files),
+    readFile: (fileName: string): Promise<string> =>
+      ipcRenderer.invoke(IpcChannels.log.read, fileName),
   },
 };
 

@@ -17,6 +17,9 @@ import { broadcastToRenderers } from '../ipc/renderer-push';
  * Instantiated once in the composition root (`app-context.ts`); services log
  * through the instance handed to them — no stray `console.log` in main code.
  */
+/** Upper bound for one log-file read into the renderer log panel. */
+const LOG_READ_MAX_BYTES = 256 * 1024;
+
 export class LoggerService {
   private minLevel: LogLevel = 'info';
   private logFilePath: string | null = null;
@@ -69,6 +72,45 @@ export class LoggerService {
       }
     }
     this.info(`Log files cleared (${cleared} file(s))`, 'LoggerService');
+  }
+
+  /**
+   * All `.log` file names in the log folder, main app log first, rest
+   * alphabetical — the tab list of the renderer log panel. Empty until the
+   * sink is initialized or when the folder is missing.
+   */
+  listLogFiles(): string[] {
+    if (!this.logFilePath) {
+      return [];
+    }
+    const mainName = path.basename(this.logFilePath);
+    let names: string[];
+    try {
+      names = fs.readdirSync(path.dirname(this.logFilePath));
+    } catch {
+      return [];
+    }
+    return names
+      .filter((name) => name.toLowerCase().endsWith('.log'))
+      .sort((a, b) => (a === mainName ? -1 : b === mainName ? 1 : a.localeCompare(b)));
+  }
+
+  /**
+   * Read the tail of one log file for the log panel's file tabs. `fileName`
+   * is validated against `listLogFiles()` (no paths from the renderer, only
+   * known basenames). Returns at most the last `LOG_READ_MAX_BYTES` and an
+   * empty string for unknown/unreadable files.
+   */
+  readLogFile(fileName: string): string {
+    if (!this.logFilePath || !this.listLogFiles().includes(fileName)) {
+      return '';
+    }
+    try {
+      const content = fs.readFileSync(path.join(path.dirname(this.logFilePath), fileName), 'utf8');
+      return content.length > LOG_READ_MAX_BYTES ? content.slice(-LOG_READ_MAX_BYTES) : content;
+    } catch {
+      return '';
+    }
   }
 
   debug(message: string, source: string): void {
