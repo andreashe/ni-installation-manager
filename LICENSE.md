@@ -12,7 +12,7 @@ In short (the license text is authoritative):
   derivatives of it is prohibited.
 - You must keep license and attribution notices intact; a reference to the
   original project must be preserved:
-  <https://github.com/example/ni-installation-manager>
+  <https://github.com/andreashe/ni-installation-manager>
 
 ## Disclaimer
 

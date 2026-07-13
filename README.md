@@ -14,9 +14,7 @@ Unofficial tool to manage and uninstall Native Instruments products. **Not affil
 
 Windows installer, always the latest build, no version in the filename to bookmark:
 
-**[⬇ Download NI-Installation-Manager-Setup.exe](https://github.com/OWNER/REPO/releases/latest/download/NI-Installation-Manager-Setup.exe)**
-
-> Replace `OWNER/REPO` above once this repository has a GitHub remote.
+**[⬇ Download NI-Installation-Manager-Setup.exe](https://github.com/andreashe/ni-installation-manager/releases/latest/download/NI-Installation-Manager-Setup.exe)**
 
 Run the installer, then launch "NI Installation Manager" from the Start menu.
 

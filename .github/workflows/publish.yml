@@ -35,8 +35,13 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # No --targets flag: passing the package name ("@electron-forge/maker-squirrel")
+      # makes Forge instantiate a fresh maker WITHOUT the config from forge.config.ts,
+      # so setupExe would be ignored and the exe gets a versioned default name.
+      # Plain `make` runs only the Squirrel maker on Windows anyway (zip is darwin-only,
+      # deb/rpm are linux-only).
       - name: Build Windows installer
-        run: npm run make -- --targets=@electron-forge/maker-squirrel
+        run: npm run make
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -44,4 +49,5 @@ jobs:
           tag_name: publish
           name: Latest Windows Build
           make_latest: true
+          fail_on_unmatched_files: true
           files: out/make/squirrel.windows/x64/NI-Installation-Manager-Setup.exe
