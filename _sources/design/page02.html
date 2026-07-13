@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bundled Page</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0b0b0c; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    #__bundler_loading { position: fixed; bottom: 20px; right: 20px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; color: #666; background: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 10000; }
+    #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #0b0b0c; z-index: 9999; }
+    #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
+    #__bundler_placeholder { color: #999; font-size: 14px; }
+  </style>
+  <noscript>
+    <style>#__bundler_loading { display: none; }</style>
+    <div style="position:fixed;bottom:12px;left:12px;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;color:#999;background:rgba(255,255,255,0.9);padding:6px 12px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.08);z-index:10000;">
+      This page requires JavaScript to display.
+    </div>
+  </noscript>
+</head>
+<body>
+  <div id="__bundler_thumbnail">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0b0b0c"></rect>
+    <text x="600" y="380" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="700" font-size="150" fill="#ffffff" letter-spacing="6">NI</text>
+    <text x="600" y="470" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="500" font-size="42" fill="#9a9a9e" letter-spacing="10">INSTALLATION MANAGER</text>
+  </svg>
+</div>
+  <div id="__bundler_loading">Unpacking...</div>
+
+  <script>
+    
+document.addEventListener('DOMContentLoaded', async function() {
+  const loading = document.getElementById('__bundler_loading');
+  function setStatus(msg) { if (loading) loading.textContent = msg; }
+
+  // Error sink persists across replaceWith since it's on window, not the DOM.
+  window.addEventListener('error', function(e) {
+    var p = document.body || document.documentElement;
+    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
+    d.id = '__bundler_err';
+    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
+      '[bundle] ' + (e.message || e.type) +
+      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
+  }, true);
+
+  try {
+    const manifestEl = document.querySelector('script[type="__bundler/manifest"]');
+    const templateEl = document.querySelector('script[type="__bundler/template"]');
+    if (!manifestEl || !templateEl) {
+      setStatus('Error: missing bundle data');
+      console.error('[bundler] Missing script tags — manifestEl:', !!manifestEl, 'templateEl:', !!templateEl);
+      return;
+    }
+
+    const manifest = JSON.parse(manifestEl.textContent);
+    let template = JSON.parse(templateEl.textContent);
+
+    const uuids = Object.keys(manifest);
+    setStatus('Unpacking ' + uuids.length + ' assets...');
+
+    const blobUrls = {};
+    await Promise.all(uuids.map(async (uuid) => {
+      const entry = manifest[uuid];
+      try {
+        const binaryStr = atob(entry.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        let finalBytes = bytes;
+        if (entry.compressed) {
+          if (typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('gzip');
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            writer.write(bytes);
+            writer.close();
+            const chunks = [];
+            let totalLen = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              totalLen += value.length;
+            }
+            finalBytes = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const chunk of chunks) { finalBytes.set(chunk, offset); offset += chunk.length; }
+          } else {
+            console.warn('DecompressionStream not available, asset ' + uuid + ' may not render');
+          }
+        }
+
+        blobUrls[uuid] = URL.createObjectURL(new Blob([finalBytes], { type: entry.mime }));
+      } catch (err) {
+        console.error('Failed to decode asset ' + uuid + ':', err);
+        blobUrls[uuid] = URL.createObjectURL(new Blob([], { type: entry.mime }));
+      }
+    }));
+
+    const extResEl = document.querySelector('script[type="__bundler/ext_resources"]');
+    const extResources = extResEl ? JSON.parse(extResEl.textContent) : [];
+    const resourceMap = {};
+    for (const entry of extResources) {
+      if (blobUrls[entry.uuid]) resourceMap[entry.id] = blobUrls[entry.uuid];
+    }
+
+    setStatus('Rendering...');
+    for (const uuid of uuids) template = template.split(uuid).join(blobUrls[uuid]);
+
+    // Strip integrity + crossorigin — blob URLs from a file:// document inherit
+    // a null origin, so crossorigin forces a CORS fetch that SRI then rejects.
+    // The manifest bytes are ours; SRI protects against CDN compromise, not this.
+    template = template.replace(/\s+integrity="[^"]*"/gi, '').replace(/\s+crossorigin="[^"]*"/gi, '');
+
+    const resourceScript = '<script>window.__resources = ' +
+      JSON.stringify(resourceMap).split('</' + 'script>').join('<\\/' + 'script>') +
+      ';</' + 'script>';
+    // Inject after <head> so the DOCTYPE stays first; prepending the script
+    // would push the parser into quirks mode. DOMParser always emits a <head>
+    // (synthesizing one if the source HTML omitted it) but may carry
+    // attributes through, so match the full opening tag. slice() rather than
+    // replace() keeps us clear of $-pattern substitution in resourceScript.
+    const headOpen = template.match(/<head[^>]*>/i);
+    if (headOpen) {
+      const i = headOpen.index + headOpen[0].length;
+      template = template.slice(0, i) + resourceScript + template.slice(i);
+    }
+
+    // Parse the template and swap the root element. Scripts inserted via
+    // DOMParser/replaceWith are inert per spec — re-create each with
+    // createElement so they execute, awaiting onload for src scripts to
+    // preserve ordering (React before ReactDOM before Babel before text/babel).
+    const doc = new DOMParser().parseFromString(template, 'text/html');
+    document.documentElement.replaceWith(doc.documentElement);
+    const dead = Array.from(document.scripts);
+    for (const old of dead) {
+      const s = document.createElement('script');
+      for (const a of old.attributes) s.setAttribute(a.name, a.value);
+      s.textContent = old.textContent;
+      // text/babel scripts with a src: fetch and inline. transformScriptTags
+      // does XHR against the src, but blob:null/ from a file:// origin is
+      // silently dropped. Inlining makes it a plain inline babel script,
+      // which transformScriptTags handles unconditionally.
+      if ((s.type === 'text/babel' || s.type === 'text/jsx') && s.src) {
+        const r = await fetch(s.src);
+        s.textContent = await r.text();
+        s.removeAttribute('src');
+      }
+      const p = s.src ? new Promise(function(r) { s.onload = s.onerror = r; }) : null;
+      old.replaceWith(s);
+      if (p) await p;
+    }
+    // Babel standalone auto-transforms type=text/babel on DOMContentLoaded,
+    // which fired before we swapped the document. Trigger manually if present.
+    if (window.Babel && typeof window.Babel.transformScriptTags === 'function') {
+      window.Babel.transformScriptTags();
+    }
+  } catch (err) {
+    setStatus('Error unpacking: ' + err.message);
+    console.error('Bundle unpack error:', err);
+  }
+});
+
+  </script>
+
+  <script type="__bundler/manifest">
+// REMOVED: Embedded PNG image asset (base64-encoded). Resource ID: 98b32098-998f-4707-9c8e-ff7ba75d223b. MIME type: image/png. This was a bundled PNG image embedded directly in the manifest as compressed base64 data to create a self-contained HTML file. Original data payload has been stripped to reduce file size. For the full interactive bundle with images, use page01.html.
+{}
+  </script>
+
+  <script type="__bundler/ext_resources">
+[{"id":"art/ek-phoenix.png","uuid":"98b32098-998f-4707-9c8e-ff7ba75d223b"},{"id":"art/kontakt8.png","uuid":"4fdd6706-a0b4-4310-a197-f7e32e76ea88"},{"id":"art/supercharger.png","uuid":"b4e6e033-9d52-492b-b13c-6cd65a59122a"},{"id":"art/ek-diamond.png","uuid":"29e94311-daf0-428f-8832-3a9e1a65ce11"},{"id":"art/solid-bus-comp.png","uuid":"a5e5ddd3-347d-459b-b253-095ac42fd391"},{"id":"art/transient-master.png","uuid":"38b81b89-8ca2-4a8b-8777-97779194a1be"},{"id":"art/replika.png","uuid":"ea350536-7890-4895-8a52-f9605a43e07c"},{"id":"art/glade.png","uuid":"a8425cef-63c2-4147-a341-4741a538b40a"},{"id":"art/rc48.png","uuid":"cd226345-4fb8-4a67-bf5f-e85d4817e5a0"},{"id":"art/duets.png","uuid":"fde1c27e-caeb-4f79-8c62-5353143bed8c"},{"id":"art/raum.png","uuid":"b981a883-5612-4aec-8329-c4c237c019de"},{"id":"art/solid-eq.png","uuid":"125d19ad-13d4-4c61-9470-3afa6510d3a3"},{"id":"art/supercharger-gt.png","uuid":"d894bf39-f492-4dde-95c3-499511f5915e"},{"id":"art/massivex.png","uuid":"3e065c19-22fa-4f91-aec6-b02b88bc4253"},{"id":"art/solid-dynamics.png","uuid":"7b17f1cf-21b5-4f25-b16e-0b9a1741bad8"},{"id":"art/rc24.png","uuid":"d6f8c149-529a-47d5-a219-0abb091bd322"}]
+  </script>
+
+  <script type="__bundler/template">
+"<!DOCTYPE html>\n<html><head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n<script src=\"8a238ec6-cd86-4825-a075-221e78e46932\"><\u002Fscript>\n<\u002Fhead>\n<body>\n<x-dc>\n<helmet>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<style>/* cyrillic-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"10a1e217-b3e3-4ef3-9a1a-a4316742b4a2\") format('woff2');\n  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;\n}\n/* cyrillic */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"79046a03-256f-4fb2-acae-15f16a5add6b\") format('woff2');\n  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;\n}\n/* greek-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"a7a7ff3c-997b-45d0-b8ba-48855e7ed190\") format('woff2');\n  unicode-range: U+1F00-1FFF;\n}\n/* greek */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"ed743e78-f119-4181-b4f4-4ba733237460\") format('woff2');\n  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;\n}\n/* vietnamese */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"03f7c29f-30a1-4bb7-9618-1f244934d2ef\") format('woff2');\n  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;\n}\n/* latin-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"50299d66-2b1b-43e0-9951-289f7e2ae81c\") format('woff2');\n  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;\n}\n/* latin */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 400;\n  font-display: swap;\n  src: url(\"9b5213f0-440c-4c89-b319-de6c6c1cadfc\") format('woff2');\n  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;\n}\n/* cyrillic-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"10a1e217-b3e3-4ef3-9a1a-a4316742b4a2\") format('woff2');\n  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;\n}\n/* cyrillic */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"79046a03-256f-4fb2-acae-15f16a5add6b\") format('woff2');\n  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;\n}\n/* greek-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"a7a7ff3c-997b-45d0-b8ba-48855e7ed190\") format('woff2');\n  unicode-range: U+1F00-1FFF;\n}\n/* greek */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"ed743e78-f119-4181-b4f4-4ba733237460\") format('woff2');\n  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;\n}\n/* vietnamese */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"03f7c29f-30a1-4bb7-9618-1f244934d2ef\") format('woff2');\n  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;\n}\n/* latin-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"50299d66-2b1b-43e0-9951-289f7e2ae81c\") format('woff2');\n  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;\n}\n/* latin */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 500;\n  font-display: swap;\n  src: url(\"9b5213f0-440c-4c89-b319-de6c6c1cadfc\") format('woff2');\n  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;\n}\n/* cyrillic-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"10a1e217-b3e3-4ef3-9a1a-a4316742b4a2\") format('woff2');\n  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;\n}\n/* cyrillic */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"79046a03-256f-4fb2-acae-15f16a5add6b\") format('woff2');\n  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;\n}\n/* greek-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"a7a7ff3c-997b-45d0-b8ba-48855e7ed190\") format('woff2');\n  unicode-range: U+1F00-1FFF;\n}\n/* greek */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"ed743e78-f119-4181-b4f4-4ba733237460\") format('woff2');\n  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;\n}\n/* vietnamese */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"03f7c29f-30a1-4bb7-9618-1f244934d2ef\") format('woff2');\n  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;\n}\n/* latin-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"50299d66-2b1b-43e0-9951-289f7e2ae81c\") format('woff2');\n  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;\n}\n/* latin */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 600;\n  font-display: swap;\n  src: url(\"9b5213f0-440c-4c89-b319-de6c6c1cadfc\") format('woff2');\n  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;\n}\n/* cyrillic-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"10a1e217-b3e3-4ef3-9a1a-a4316742b4a2\") format('woff2');\n  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;\n}\n/* cyrillic */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"79046a03-256f-4fb2-acae-15f16a5add6b\") format('woff2');\n  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;\n}\n/* greek-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"a7a7ff3c-997b-45d0-b8ba-48855e7ed190\") format('woff2');\n  unicode-range: U+1F00-1FFF;\n}\n/* greek */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"ed743e78-f119-4181-b4f4-4ba733237460\") format('woff2');\n  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;\n}\n/* vietnamese */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"03f7c29f-30a1-4bb7-9618-1f244934d2ef\") format('woff2');\n  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;\n}\n/* latin-ext */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"50299d66-2b1b-43e0-9951-289f7e2ae81c\") format('woff2');\n  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;\n}\n/* latin */\n@font-face {\n  font-family: 'Inter';\n  font-style: normal;\n  font-weight: 700;\n  font-display: swap;\n  src: url(\"9b5213f0-440c-4c89-b319-de6c6c1cadfc\") format('woff2');\n  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;\n}\n<\u002Fstyle>\n<style>\n  *{box-sizing:border-box;}\n  html,body{margin:0;height:100%;}\n  ::-webkit-scrollbar{width:10px;}\n  ::-webkit-scrollbar-track{background:transparent;}\n  ::-webkit-scrollbar-thumb{background:#2e2e30;border-radius:6px;border:2px solid #131314;}\n  ::-webkit-scrollbar-thumb:hover{background:#3a3a3c;}\n<\u002Fstyle>\n<\u002Fhelmet>\n<div style=\"display:flex;height:100vh;width:100%;background:#0e0e0f;font-family:'Inter',sans-serif;color:#e8e8ea;overflow:hidden;\">\n\n  <!-- LEFT SIDEBAR (fixed width) -->\n  <aside style=\"flex:0 0 264px;width:264px;background:#0b0b0c;border-right:1px solid #1c1c1e;display:flex;flex-direction:column;padding:26px 0;\">\n    <div style=\"display:flex;align-items:center;gap:11px;padding:0 26px 40px;\">\n      <span style=\"font-weight:700;font-size:35px;line-height:26px;letter-spacing:0.5px;color:#fff;\">NI<\u002Fspan>\n      <span style=\"display:flex;flex-direction:column;font-weight:500;font-size:11px;line-height:13px;letter-spacing:1.6px;color:#9a9a9e;text-transform:uppercase;\">\n        <span>Installation<\u002Fspan><span>Manager<\u002Fspan>\n      <\u002Fspan>\n    <\u002Fdiv>\n\n    <nav style=\"display:flex;flex-direction:column;gap:4px;padding:0 14px;\">\n      <div style=\"display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:6px;color:#9a9a9e;cursor:pointer;\" style-hover=\"background:#161618;color:#e8e8ea;\">\n        <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"><\u002Frect><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"><\u002Frect><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"><\u002Frect><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"><\u002Frect><\u002Fsvg>\n        <span style=\"font-size:15px;\">Home<\u002Fspan>\n      <\u002Fdiv>\n      <div style=\"display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:6px;background:#18181b;color:#fff;cursor:pointer;\">\n        <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><path d=\"M3 6h18\"><\u002Fpath><path d=\"M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6\"><\u002Fpath><path d=\"M6 6l1 13.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 6\"><\u002Fpath><path d=\"M10 11v5\"><\u002Fpath><path d=\"M14 11v5\"><\u002Fpath><\u002Fsvg>\n        <span style=\"font-size:15px;font-weight:500;\">Uninstall<\u002Fspan>\n      <\u002Fdiv>\n    <\u002Fnav>\n\n    <div style=\"flex:1;\"><\u002Fdiv>\n\n    <div style=\"padding:0 14px;\">\n      <div style=\"display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:6px;color:#9a9a9e;cursor:pointer;\" style-hover=\"background:#161618;color:#e8e8ea;\">\n        <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><circle cx=\"12\" cy=\"12\" r=\"3\"><\u002Fcircle><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"><\u002Fpath><\u002Fsvg>\n        <span style=\"font-size:15px;\">Preferences<\u002Fspan>\n      <\u002Fdiv>\n    <\u002Fdiv>\n  <\u002Faside>\n\n  <!-- RIGHT CONTENT (scales) -->\n  <main style=\"flex:1;min-width:0;display:flex;flex-direction:column;background:#0e0e0f;\">\n\n    <!-- Header -->\n    <div style=\"display:flex;align-items:center;justify-content:space-between;padding:30px 40px 18px;\">\n      <h1 style=\"margin:0;font-size:30px;font-weight:600;color:#fff;letter-spacing:-0.3px;\">Uninstall<\u002Fh1>\n      <button onclick=\"{{ reload }}\" title=\"Reload\" aria-label=\"Reload\" style=\"display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:none;background:transparent;color:#9a9a9e;border-radius:8px;cursor:pointer;\" style-hover=\"background:#18181b;color:#fff;\">\n        <svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" style=\"{{ spinStyle }}\"><path d=\"M21 12a9 9 0 1 1-2.64-6.36\"><\u002Fpath><path d=\"M21 3v6h-6\"><\u002Fpath><\u002Fsvg>\n      <\u002Fbutton>\n    <\u002Fdiv>\n\n    <!-- Select-all bar -->\n    <div style=\"display:flex;align-items:center;gap:14px;padding:10px 40px;border-top:1px solid #1c1c1e;border-bottom:1px solid #1c1c1e;background:#0b0b0c;\">\n      <label style=\"display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;\">\n        <span onclick=\"{{ toggleAll }}\" style=\"{{ allBoxStyle }}\">{{ allMark }}<\u002Fspan>\n        <span style=\"font-size:13.5px;color:#b6b6ba;font-weight:500;\">{{ selectLabel }}<\u002Fspan>\n      <\u002Flabel>\n      <span style=\"font-size:13px;color:#6a6a6e;margin-left:6px;\">{{ countLabel }}<\u002Fspan>\n      <div style=\"position:relative;display:flex;align-items:center;margin-left:18px;width:240px;\">\n        <svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#6a6a6e\" stroke-width=\"2\" style=\"position:absolute;left:11px;pointer-events:none;\"><circle cx=\"11\" cy=\"11\" r=\"7\"><\u002Fcircle><path d=\"M21 21l-4.3-4.3\"><\u002Fpath><\u002Fsvg>\n        <input value=\"{{ query }}\" oninput=\"{{ onSearch }}\" placeholder=\"Search products\" style=\"width:100%;height:32px;padding:0 32px 0 32px;background:#161618;border:1px solid #26262a;border-radius:6px;color:#e8e8ea;font-size:13px;font-family:inherit;outline:none;\" style-focus=\"border-color:#3b6fe0;\">\n        <span onclick=\"{{ clearSearch }}\" style=\"{{ clearBtnStyle }}\" title=\"Clear\">\n          <svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\"><path d=\"M18 6L6 18\"><\u002Fpath><path d=\"M6 6l12 12\"><\u002Fpath><\u002Fsvg>\n        <\u002Fspan>\n      <\u002Fdiv>\n      <div style=\"flex:1;\"><\u002Fdiv>\n      <button onclick=\"{{ uninstallSelected }}\" style=\"{{ bulkBtnStyle }}\">Uninstall selected<\u002Fbutton>\n    <\u002Fdiv>\n\n    <!-- Scrollable list -->\n    <div style=\"flex:1;overflow-y:auto;overflow-x:hidden;\">\n      <sc-for list=\"{{ products }}\" as=\"p\">\n        <div onclick=\"{{ p.toggle }}\" style=\"display:flex;align-items:center;gap:20px;padding:0 40px;height:104px;border-bottom:1px solid #161617;cursor:pointer;\" style-hover=\"background:#141416;\">\n          <span style=\"{{ p.boxStyle }}\">{{ p.mark }}<\u002Fspan>\n          <div style=\"flex:0 0 168px;width:168px;height:82px;border-radius:4px;overflow:hidden;background:#1a1a1c;\">{{ p.thumb }}<\u002Fdiv>\n          <div style=\"flex:1;min-width:0;font-size:16px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\">{{ p.name }}<\u002Fdiv>\n          <div style=\"flex:0 0 70px;font-size:14px;color:#8a8a8e;text-align:right;\">{{ p.version }}<\u002Fdiv>\n          <div style=\"flex:0 0 80px;font-size:14px;color:#8a8a8e;text-align:right;\">{{ p.size }}<\u002Fdiv>\n          <button onclick=\"{{ p.uninstall }}\" style=\"flex:0 0 auto;margin-left:24px;padding:9px 26px;background:#1f1f22;border:1px solid #2c2c30;border-radius:6px;color:#e8e8ea;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;\" style-hover=\"background:#2a2a2e;border-color:#3a3a3e;\">Uninstall<\u002Fbutton>\n        <\u002Fdiv>\n      <\u002Fsc-for>\n    <\u002Fdiv>\n\n  <\u002Fmain>\n<\u002Fdiv>\n<\u002Fx-dc>\n\n<script type=\"text/x-dc\" data-dc-script=\"\">\nclass Component extends DCLogic {\n  state = { products: this.seed(), checked: {}, spinning: false, query: \"\" };\n\n  seed() {\n    const data = [\n      [\"Duets\", \"2.0.1\", \"798 KB\", \"art/duets.png\"],\n      [\"Electric Keys - Diamond\", \"1.2.1\", \"4.29 GB\", \"art/ek-diamond.png\"],\n      [\"Electric Keys - Phoenix\", \"1.2.1\", \"4.29 GB\", \"art/ek-phoenix.png\"],\n      [\"Glade\", \"1.1.0\", \"4.61 GB\", \"art/glade.png\"],\n      [\"Kontakt 8\", \"8.11.0\", \"1.19 GB\", \"art/kontakt8.png\"],\n      [\"Massive X\", \"1.7.1\", \"890 MB\", \"art/massivex.png\"],\n      [\"Raum\", \"1.3.7\", \"55 MB\", \"art/raum.png\"],\n      [\"RC 24\", \"1.4.11\", \"36 MB\", \"art/rc24.png\"],\n      [\"RC 48\", \"1.4.11\", \"33 MB\", \"art/rc48.png\"],\n      [\"Replika\", \"1.6.7\", \"112 MB\", \"art/replika.png\"],\n      [\"Solid Bus Comp FX\", \"1.4.11\", \"31 MB\", \"art/solid-bus-comp.png\"],\n      [\"Solid Dynamics FX\", \"1.4.11\", \"33 MB\", \"art/solid-dynamics.png\"],\n      [\"Solid EQ FX\", \"1.4.11\", \"36 MB\", \"art/solid-eq.png\"],\n      [\"Supercharger\", \"1.4.11\", \"64 MB\", \"art/supercharger.png\"],\n      [\"Supercharger GT\", \"1.4.11\", \"42 MB\", \"art/supercharger-gt.png\"],\n      [\"Transient Master FX\", \"1.4.11\", \"15 MB\", \"art/transient-master.png\"],\n    ];\n    return data.map((d, i) => ({ id: i, name: d[0], version: d[1], size: d[2], img: d[3] }));\n  }\n\n  boxStyle(on) {\n    const base = \"display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:4px;font-size:13px;line-height:1;cursor:pointer;flex:0 0 auto;transition:all .12s;\";\n    return on\n      ? base + \"background:#3b6fe0;border:1px solid #3b6fe0;color:#fff;\"\n      : base + \"background:transparent;border:1px solid #44444a;color:transparent;\";\n  }\n\n  renderVals() {\n    const all = this.state.products || [];\n    const q = this.state.query.trim().toLowerCase();\n    const products = q ? all.filter(p => p.name.toLowerCase().includes(q)) : all;\n    const checked = this.state.checked;\n    const total = products.length;\n    const numChecked = products.filter(p => checked[p.id]).length;\n    const allOn = total > 0 && numChecked === total;\n\n    const toggle = (id) => this.setState(s => ({ checked: { ...s.checked, [id]: !s.checked[id] } }));\n\n    return {\n      products: products.map(p => ({\n        ...p,\n        thumb: React.createElement('img', { src: (window.__resources && window.__resources[p.img]) || p.img, alt: p.name, style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }),\n        boxStyle: this.boxStyle(!!checked[p.id]),\n        mark: checked[p.id] ? \"✓\" : \"\",\n        toggle: () => toggle(p.id),\n        uninstall: (e) => { if (e) e.stopPropagation(); alert(\"Uninstall \" + p.name + \"?\"); },\n      })),\n      allMark: allOn ? \"✓\" : (numChecked > 0 ? \"–\" : \"\"),\n      allBoxStyle: this.boxStyle(allOn || numChecked > 0),\n      toggleAll: () => {\n        const next = {};\n        if (numChecked < total) products.forEach(p => { next[p.id] = true; });\n        this.setState({ checked: next });\n      },\n      selectLabel: allOn ? \"Deselect all\" : \"Select all\",\n      countLabel: numChecked > 0 ? numChecked + \" of \" + total + \" selected\" : total + \" products\",\n      query: this.state.query,\n      onSearch: (e) => this.setState({ query: e.target.value }),\n      clearSearch: () => this.setState({ query: \"\" }),\n      clearBtnStyle: \"position:absolute;right:8px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:#8a8a8e;cursor:pointer;\" + (this.state.query ? \"\" : \"visibility:hidden;\"),\n      uninstallSelected: () => {\n        if (numChecked === 0) return;\n        alert(\"Uninstall \" + numChecked + \" selected product(s)?\");\n      },\n      bulkBtnStyle: \"padding:8px 18px;border-radius:6px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:\" + (numChecked ? \"pointer\" : \"not-allowed\") + \";border:1px solid \" + (numChecked ? \"#3b6fe0\" : \"#26262a\") + \";background:\" + (numChecked ? \"#3b6fe0\" : \"transparent\") + \";color:\" + (numChecked ? \"#fff\" : \"#55555a\") + \";\",\n      reload: () => {\n        this.setState({ spinning: true });\n        setTimeout(() => this.setState({ spinning: false }), 700);\n      },\n      spinStyle: this.state.spinning ? \"transition:transform .7s ease;transform:rotate(360deg);transform-origin:center;\" : \"transform-origin:center;\",\n    };\n  }\n}\n<\u002Fscript>\n\n\n<\u002Fbody><\u002Fhtml>"
+  </script>
+</body>
