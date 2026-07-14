@@ -14,7 +14,7 @@ export interface UninstallProductSpec {
   version: string | null;
   /** Only EXISTING disk paths (resolved per the folder rules, PLAN.md §2.2). */
   diskPaths: ProductDiskPath[];
-  /** Full HKLM-relative key paths to delete recursively. */
+  /** Key paths to delete recursively (optionally hive-prefixed; bare = HKLM, TODO12). */
   registryKeyPaths: string[];
   /** All registry values per key path (for the registry backup JSON). */
   registryEntries: Record<string, RegistryValueDto[]>;

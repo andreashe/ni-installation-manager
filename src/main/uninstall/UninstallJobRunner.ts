@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { isBackupOnlyKind } from '../../shared/types/product';
 import { errorMessage } from '../utils/error-message';
+import { displayKeyPath } from '../utils/registry-path';
 import type { BackupService } from '../services/BackupService';
 import type { FsGuard } from '../utils/FsGuard';
 import type { RegistryGuard } from '../utils/RegistryGuard';
@@ -154,12 +155,12 @@ export class UninstallJobRunner {
   /** Deletion phase, registry: one step per product key (both hive views). */
   private async removeRegistryKeys(product: UninstallProductSpec): Promise<void> {
     for (const keyPath of product.registryKeyPaths) {
-      this.reporter.line(`Removing registry key HKLM\\${keyPath}`);
+      this.reporter.line(`Removing registry key ${displayKeyPath(keyPath)}`);
       try {
         await this.registryGuard.deleteKeyTree(keyPath);
       } catch (error) {
         throw new Error(
-          `${product.name}: removing registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+          `${product.name}: removing registry key ${displayKeyPath(keyPath)} failed — ${errorMessage(error)}`,
         );
       }
       this.reporter.stepDone();

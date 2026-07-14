@@ -11,11 +11,14 @@ const LOG_SOURCE = 'RegistryGuard';
  * concrete backend.
  */
 export interface RegistryMutationBackend {
-  /** Recursively delete a key and everything below it. `keyPath` includes the hive, e.g. `HKLM\SOFTWARE\...`. */
+  /**
+   * Recursively delete a key and everything below it. `keyPath` may carry a
+   * hive prefix (`HKLM\`, `HKCU\`, `HKCR\`); bare paths mean HKLM (TODO12).
+   */
   deleteKeyTree(keyPath: string): Promise<void>;
-  /** Delete a single value inside a key. */
+  /** Delete a single value inside a key (same path convention). */
   deleteValue(keyPath: string, valueName: string): Promise<void>;
-  /** Create an HKLM-relative key (if missing) and write all given values into it (TODO8 restore). */
+  /** Create a key (if missing) and write all given values into it (TODO8 restore; same path convention). */
   restoreKeyValues(keyPath: string, values: RegistryValueDto[]): Promise<void>;
 }
 

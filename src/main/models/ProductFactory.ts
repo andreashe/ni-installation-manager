@@ -15,7 +15,11 @@ import { Product } from './Product';
 
 /** Raw scan input: one registry key belonging to the product. */
 export interface ProductRegistrySource {
-  /** Full HKLM-relative key path, e.g. `SOFTWARE\WOW6432Node\Native Instruments\Kontakt 8`. */
+  /**
+   * Key path, optionally hive-prefixed (`HKCU\…`, `HKCR\…`); bare paths are
+   * HKLM-relative, e.g. `SOFTWARE\WOW6432Node\Native Instruments\Kontakt 8`
+   * (see `src/main/utils/registry-path.ts`, TODO12).
+   */
   keyPath: string;
   values: RegistryValueDto[];
 }

@@ -1,4 +1,10 @@
-import { NI_REGISTRY_ROOTS } from '../../config/ni.config';
+import {
+  NI_HKCU_PRODUCT_ROOT,
+  NI_INSTALLER_PRODUCT_NAME_PREFIX,
+  NI_INSTALLER_PRODUCT_NAME_VALUE,
+  NI_INSTALLER_PRODUCTS_ROOT,
+  NI_REGISTRY_ROOTS,
+} from '../../config/ni.config';
 import type { Product } from '../models/Product';
 import { ProductFactory } from '../models/ProductFactory';
 import type { ProductRegistrySource } from '../models/ProductFactory';
@@ -76,6 +82,14 @@ export class ProductScanService {
    * Read every product subkey of both NI registry roots and group the raw
    * values by product name (case-insensitive merge — registry key names are
    * case-insensitive; first-seen casing wins for display).
+   *
+   * Each product found under HKLM is then supplemented with two more key
+   * sources when they exist (TODO12), so they join the product's registry
+   * entries for uninstall/backup/restore:
+   * - the per-user key `HKCU\SOFTWARE\Native Instruments\<name>`;
+   * - the Windows Installer registration under
+   *   `HKCR\Installer\Products\<hash>`, located via its `ProductName` value
+   *   (`Native Instruments <name>`).
    */
   private collectRegistrySources(): Map<string, ProductRegistrySource[]> {
     const byLowerName = new Map<string, { displayName: string; sources: ProductRegistrySource[] }>();
@@ -94,10 +108,50 @@ export class ProductScanService {
       }
     }
 
+    const installerKeysByName = this.collectInstallerProductKeys();
+    for (const { displayName, sources } of byLowerName.values()) {
+      this.appendSource(sources, `${NI_HKCU_PRODUCT_ROOT}\\${displayName}`);
+      const installerKeyPath = installerKeysByName.get(
+        `${NI_INSTALLER_PRODUCT_NAME_PREFIX}${displayName}`.toLowerCase(),
+      );
+      if (installerKeyPath) {
+        this.appendSource(sources, installerKeyPath);
+      }
+    }
+
     const result = new Map<string, ProductRegistrySource[]>();
     for (const { displayName, sources } of byLowerName.values()) {
       result.set(displayName, sources);
     }
     return result;
+  }
+
+  /** Add a key as source when it exists (values readable). */
+  private appendSource(sources: ProductRegistrySource[], keyPath: string): void {
+    const values = this.registry.readAllValues(keyPath);
+    if (values !== null) {
+      sources.push({ keyPath, values });
+    }
+  }
+
+  /**
+   * Map `ProductName` value → full key path for every NI entry under the
+   * Windows Installer products root (subkey names are random hashes, so the
+   * whole root is enumerated once per scan). Keys are lower-cased for the
+   * case-insensitive lookup.
+   */
+  private collectInstallerProductKeys(): Map<string, string> {
+    const byProductName = new Map<string, string>();
+    for (const subkeyName of this.registry.listSubkeyNames(NI_INSTALLER_PRODUCTS_ROOT)) {
+      const keyPath = `${NI_INSTALLER_PRODUCTS_ROOT}\\${subkeyName}`;
+      const productName = this.registry.readStringValue(keyPath, NI_INSTALLER_PRODUCT_NAME_VALUE);
+      if (
+        productName !== null &&
+        productName.toLowerCase().startsWith(NI_INSTALLER_PRODUCT_NAME_PREFIX.toLowerCase())
+      ) {
+        byProductName.set(productName.toLowerCase(), keyPath);
+      }
+    }
+    return byProductName;
   }
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { UninstallProgressReporter } from '../uninstall/uninstall-job';
 import { errorMessage } from '../utils/error-message';
+import { displayKeyPath } from '../utils/registry-path';
 import { deviceRoot } from '../utils/fs-size';
 import type { RegistryGuard } from '../utils/RegistryGuard';
 import type { MoveJobSpec, MoveProductSpec } from './move-job';
@@ -55,7 +56,7 @@ export class MoveJobRunner {
       }
       for (const keyPath of registryKeyPaths) {
         this.reporter.line(
-          `DRY-RUN: would update registry key HKLM\\${keyPath} (${product.registryUpdates[keyPath].length} value(s))`,
+          `DRY-RUN: would update registry key ${displayKeyPath(keyPath)} (${product.registryUpdates[keyPath].length} value(s))`,
         );
         this.reporter.stepDone();
       }
@@ -84,12 +85,14 @@ export class MoveJobRunner {
     // Registry only after ALL file moves of the product succeeded (TODO10).
     for (const keyPath of registryKeyPaths) {
       const values = product.registryUpdates[keyPath];
-      this.reporter.line(`Updating registry key HKLM\\${keyPath} (${values.length} value(s))`);
+      this.reporter.line(
+        `Updating registry key ${displayKeyPath(keyPath)} (${values.length} value(s))`,
+      );
       try {
         await this.registryGuard.restoreKeyValues(keyPath, values);
       } catch (error) {
         throw new Error(
-          `${product.name}: updating registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+          `${product.name}: updating registry key ${displayKeyPath(keyPath)} failed — ${errorMessage(error)}`,
         );
       }
       this.reporter.stepDone();

@@ -5,6 +5,7 @@ import type { RestoreStore } from '../stores/RestoreStore';
 import { getBackupEntryPath } from '../utils/backup-layout';
 import { sizeOfPath } from '../utils/fs-size';
 import { normalizePathKey } from '../utils/path-key';
+import { displayKeyPath } from '../utils/registry-path';
 import type { LoggerService } from './LoggerService';
 
 const LOG_SOURCE = 'RestoreDetailsService';
@@ -70,9 +71,7 @@ export class RestoreDetailsService {
       backupDate: backup.backupDate,
       locations,
       totalRestoreBytes: total,
-      registryPaths: Object.keys(backup.descriptor.registryEntries).map(
-        (keyPath) => `HKLM\\${keyPath}`,
-      ),
+      registryPaths: Object.keys(backup.descriptor.registryEntries).map(displayKeyPath),
     };
   }
 }

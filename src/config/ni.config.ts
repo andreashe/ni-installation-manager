@@ -15,6 +15,26 @@ export const NI_REGISTRY_ROOTS = [
   'SOFTWARE\\Native Instruments', // 32-bit view / some entries
 ] as const;
 
+/**
+ * Per-user product key (TODO12), checked additionally for every product
+ * found under the HKLM roots: `HKCU\SOFTWARE\Native Instruments\<name>`.
+ * Hive-prefixed (see `src/main/utils/registry-path.ts`).
+ */
+export const NI_HKCU_PRODUCT_ROOT = 'HKCU\\SOFTWARE\\Native Instruments';
+
+/**
+ * Windows Installer product registrations (TODO12): one subkey per MSI
+ * product with a RANDOM hash name; a product's key is found by matching its
+ * `ProductName` value against `NI_INSTALLER_PRODUCT_NAME_PREFIX + <name>`.
+ */
+export const NI_INSTALLER_PRODUCTS_ROOT = 'HKCR\\Installer\\Products';
+
+/** Value inside an installer product key holding the display name. */
+export const NI_INSTALLER_PRODUCT_NAME_VALUE = 'ProductName';
+
+/** `ProductName` pattern: `Native Instruments <product name>`. */
+export const NI_INSTALLER_PRODUCT_NAME_PREFIX = 'Native Instruments ';
+
 /** Registry value holding the product version (may be missing). */
 export const NI_VALUE_CONTENT_VERSION = 'ContentVersion';
 

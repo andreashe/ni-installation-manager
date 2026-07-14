@@ -13,6 +13,19 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Native Instruments\<ProductName>\               (32-
 
 The same product may appear in both views. `ProductScanService` merges subkeys **by name (case-insensitive)** into one `Product`, which remembers every key path it was found under (`Product.registryEntries`, keyed by full path).
 
+Every product found under HKLM is then **supplemented** with two more keys when they exist (TODO12) — they join `registryEntries` and therefore uninstall, backup and restore automatically:
+
+```
+HKCU\SOFTWARE\Native Instruments\<ProductName>\        (per-user key, NI_HKCU_PRODUCT_ROOT)
+HKCR\Installer\Products\<hash>\                        (Windows Installer registration)
+```
+
+The installer key's subkey name is a random hash; it is located by enumerating `NI_INSTALLER_PRODUCTS_ROOT` once per scan and matching each key's `ProductName` value against `Native Instruments <ProductName>` (case-insensitive).
+
+### Hive-qualified key paths
+
+Key paths may carry a hive prefix (`HKLM\`, `HKCU\`, `HKCR\`); a **bare path means HKLM**. Parsing/formatting lives in `src/main/utils/registry-path.ts` (`splitHiveKeyPath`, `displayKeyPath` — the latter is used everywhere key paths are logged or shown). The bare-equals-HKLM default keeps registry backups from before this convention restorable unchanged.
+
 ## Values used
 
 | Value | Use |

@@ -55,8 +55,9 @@ export interface MoveProductSpec {
   entries: MoveEntrySpec[];
   /**
    * Path-carrying registry values (see `RESTORE_AS_REGISTRY_PATH_VALUE_NAMES`)
-   * whose value CHANGED under the rename patterns, per HKLM-relative key
-   * path — written after the file moves of the product succeeded (TODO10).
+   * whose value CHANGED under the rename patterns, per key path (optionally
+   * hive-prefixed; bare = HKLM) — written after the file moves of the
+   * product succeeded (TODO10).
    */
   registryUpdates: Record<string, RegistryValueDto[]>;
 }

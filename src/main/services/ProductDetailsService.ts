@@ -4,6 +4,7 @@ import type { ProductDetailsDto, ProductLocationDetails } from '../../shared/typ
 import type { ProductStore } from '../stores/ProductStore';
 import { sizeOfPath } from '../utils/fs-size';
 import { normalizePathKey, removeNestedPaths } from '../utils/path-key';
+import { displayKeyPath } from '../utils/registry-path';
 import type { LoggerService } from './LoggerService';
 
 const LOG_SOURCE = 'ProductDetailsService';
@@ -60,7 +61,7 @@ export class ProductDetailsService {
       removable: product.removable,
       locations,
       totalDiskUsageBytes: total,
-      registryPaths: Object.keys(product.registryEntries).map((keyPath) => `HKLM\\${keyPath}`),
+      registryPaths: Object.keys(product.registryEntries).map(displayKeyPath),
     };
   }
 

@@ -33,7 +33,7 @@ export interface RestoreProductSpec {
   name: string;
   version: string | null;
   entries: RestoreEntrySpec[];
-  /** All backed-up registry values per HKLM-relative key path — restored 1:1. */
+  /** All backed-up registry values per key path (optionally hive-prefixed; bare = HKLM) — restored 1:1. */
   registryEntries: Record<string, RegistryValueDto[]>;
   /**
    * CLONE of the backup descriptor this spec was calculated from. The

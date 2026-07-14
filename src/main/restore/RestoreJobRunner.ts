@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { UninstallProgressReporter } from '../uninstall/uninstall-job';
 import { errorMessage } from '../utils/error-message';
+import { displayKeyPath } from '../utils/registry-path';
 import { deviceRoot } from '../utils/fs-size';
 import type { RegistryGuard } from '../utils/RegistryGuard';
 import type { RestoreJobSpec, RestoreProductSpec } from './restore-job';
@@ -57,7 +58,7 @@ export class RestoreJobRunner {
       }
       for (const keyPath of registryKeyPaths) {
         this.reporter.line(
-          `DRY-RUN: would restore registry key HKLM\\${keyPath} (${product.registryEntries[keyPath].length} value(s))`,
+          `DRY-RUN: would restore registry key ${displayKeyPath(keyPath)} (${product.registryEntries[keyPath].length} value(s))`,
         );
         this.reporter.stepDone();
       }
@@ -86,12 +87,14 @@ export class RestoreJobRunner {
 
     for (const keyPath of registryKeyPaths) {
       const values = product.registryEntries[keyPath];
-      this.reporter.line(`Restoring registry key HKLM\\${keyPath} (${values.length} value(s))`);
+      this.reporter.line(
+        `Restoring registry key ${displayKeyPath(keyPath)} (${values.length} value(s))`,
+      );
       try {
         await this.registryGuard.restoreKeyValues(keyPath, values);
       } catch (error) {
         throw new Error(
-          `${product.name}: restoring registry key HKLM\\${keyPath} failed — ${errorMessage(error)}`,
+          `${product.name}: restoring registry key ${displayKeyPath(keyPath)} failed — ${errorMessage(error)}`,
         );
       }
       this.reporter.stepDone();
