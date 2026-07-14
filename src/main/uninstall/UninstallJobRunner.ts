@@ -5,6 +5,7 @@ import { displayKeyPath } from '../utils/registry-path';
 import type { BackupService } from '../services/BackupService';
 import type { FsGuard } from '../utils/FsGuard';
 import type { RegistryGuard } from '../utils/RegistryGuard';
+import { deletableRegistryKeyPaths } from './uninstall-job';
 import type {
   UninstallJobSpec,
   UninstallProductSpec,
@@ -60,7 +61,7 @@ export class UninstallJobRunner {
 
       if (spec.mode === 'uninstall') {
         await this.removeDiskPaths(product);
-        await this.removeRegistryKeys(product);
+        await this.removeRegistryKeys(product, spec);
       }
 
       this.reporter.productDone(product.name);
@@ -152,9 +153,23 @@ export class UninstallJobRunner {
     }
   }
 
-  /** Deletion phase, registry: one step per product key (both hive views). */
-  private async removeRegistryKeys(product: UninstallProductSpec): Promise<void> {
+  /**
+   * Deletion phase, registry: one step per deletable product key. HKCU keys
+   * (per-user data) are kept unless the opt-in setting allows deleting them
+   * (TODO12) — step accounting in `deletableRegistryKeyPaths` matches.
+   */
+  private async removeRegistryKeys(
+    product: UninstallProductSpec,
+    spec: UninstallJobSpec,
+  ): Promise<void> {
+    const deletable = new Set(deletableRegistryKeyPaths(product, spec));
     for (const keyPath of product.registryKeyPaths) {
+      if (!deletable.has(keyPath)) {
+        this.reporter.line(
+          `Keeping ${displayKeyPath(keyPath)} (user data — enable "Also delete user data" in Preferences to remove)`,
+        );
+        continue;
+      }
       this.reporter.line(`Removing registry key ${displayKeyPath(keyPath)}`);
       try {
         await this.registryGuard.deleteKeyTree(keyPath);

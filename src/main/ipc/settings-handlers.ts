@@ -17,6 +17,16 @@ export function registerSettingsHandlers(context: AppContext): void {
   });
 }
 
+/** All boolean settings keys — accepted 1:1 when the payload type matches. */
+const BOOLEAN_SETTING_KEYS = [
+  'dryRun',
+  'backupEnabled',
+  'deleteUserRegistryData',
+  'ignoreBackupSpaceCheck',
+  'ignoreRestoreSpaceCheck',
+  'ignoreMoveSpaceCheck',
+] as const;
+
 /**
  * Validate an untrusted partial-settings payload from the renderer: only
  * known keys with correct types survive; everything else is dropped.
@@ -27,17 +37,13 @@ function sanitizeSettingsPartial(raw: unknown): Partial<AppSettings> {
     return result;
   }
   const candidate = raw as Record<string, unknown>;
-  if (typeof candidate.dryRun === 'boolean') {
-    result.dryRun = candidate.dryRun;
-  }
-  if (typeof candidate.backupEnabled === 'boolean') {
-    result.backupEnabled = candidate.backupEnabled;
+  for (const key of BOOLEAN_SETTING_KEYS) {
+    if (typeof candidate[key] === 'boolean') {
+      result[key] = candidate[key] as boolean;
+    }
   }
   if (typeof candidate.backupFolder === 'string') {
     result.backupFolder = candidate.backupFolder;
-  }
-  if (typeof candidate.ignoreBackupSpaceCheck === 'boolean') {
-    result.ignoreBackupSpaceCheck = candidate.ignoreBackupSpaceCheck;
   }
   if (
     typeof candidate.logLevel === 'string' &&

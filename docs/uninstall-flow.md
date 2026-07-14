@@ -28,7 +28,7 @@ Entry: `uninstall:start` IPC → `UninstallService.start(names, mode)`; `mode` i
 
 1. *(backup enabled + folder set, or mode 'backup')* free-space check (`BackupService.ensureFreeSpace`, `fs.statfs`; skippable via the "Ignore space check for backup" setting), then one step per existing disk path (copy into `<backup>/<product>/files/<Kind>/`) plus one step for the registry dump (`registry/64-bit.json` + `32-bit.json`, values incl. types) and the **`niim-backup-desc.json`** description file (name, version, backup date, serialized product whose disk paths list **existing locations only** — registry keys may name folders without content; those are neither copied nor listed as restorable). Targets left over from a previous backup run are **overwritten** (removed, then copied fresh), never duplicated with suffixes.
 2. One step per existing disk path deletion — resolved paths already respect the shared-folder rules; directories via `FsGuard.deleteFolder`, single files via `FsGuard.deleteFile`.
-3. One step per registry key deletion (`RegistryGuard.deleteKeyTree`) for every hive path the product was found under.
+3. One step per registry key deletion (`RegistryGuard.deleteKeyTree`) for every deletable key the product was found under — HKCU per-user keys are kept (reported as "Keeping …") unless the "Also delete user data of instruments from registry" preference is on (`deletableRegistryKeyPaths`, TODO12).
 4. `product-done` → main removes the product from `ProductStore` (skipped in dry-run) → row disappears live.
 
 Failure anywhere (e.g. insufficient backup space) aborts the job; status `failed` with the error on the progress page. The page stays open until the user presses CLOSE (`uninstall:dismiss` → store reset to `idle`).

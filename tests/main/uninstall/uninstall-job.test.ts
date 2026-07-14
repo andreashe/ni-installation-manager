@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Product } from '../../../src/main/models/Product';
-import { computeTotalSteps, toProductSpec } from '../../../src/main/uninstall/uninstall-job';
+import {
+  computeTotalSteps,
+  deletableRegistryKeyPaths,
+  toProductSpec,
+} from '../../../src/main/uninstall/uninstall-job';
 import type { UninstallJobSpec, UninstallProductSpec } from '../../../src/main/uninstall/uninstall-job';
 
 function product(name: string, diskPathCount: number, registryKeyCount: number): UninstallProductSpec {
@@ -36,6 +40,7 @@ function spec(overrides: Partial<UninstallJobSpec>): UninstallJobSpec {
     backupEnabled: false,
     backupFolder: '',
     ignoreSpaceCheck: false,
+    deleteUserRegistryData: false,
     products: [],
     ...overrides,
   };
@@ -77,6 +82,43 @@ describe('computeTotalSteps', () => {
     const s = spec({ mode: 'backup', backupFolder: 'D:\\backup', products: [product('A', 2, 2)] });
     // 2 disk-path backups + 1 registry/description step; NO deletion steps.
     expect(computeTotalSteps(s)).toBe(3);
+  });
+
+  it('excludes HKCU keys from the deletion steps unless deleteUserRegistryData is set (TODO12)', () => {
+    const withHkcu = product('A', 1, 1);
+    withHkcu.registryKeyPaths.push('HKCU\\SOFTWARE\\Native Instruments\\A');
+
+    // 1 disk deletion + 1 HKLM registry deletion; HKCU key kept.
+    expect(computeTotalSteps(spec({ products: [withHkcu] }))).toBe(2);
+    // Opt-in: HKCU key counts too.
+    expect(
+      computeTotalSteps(spec({ deleteUserRegistryData: true, products: [withHkcu] })),
+    ).toBe(3);
+  });
+});
+
+describe('deletableRegistryKeyPaths (TODO12)', () => {
+  const withHkcu = product('A', 0, 1);
+  withHkcu.registryKeyPaths.push('HKCU\\SOFTWARE\\Native Instruments\\A');
+
+  it('filters HKCU keys by default', () => {
+    expect(deletableRegistryKeyPaths(withHkcu, spec({}))).toEqual(['SOFTWARE\\NI\\A0']);
+  });
+
+  it('keeps HKCU keys with the opt-in setting', () => {
+    expect(deletableRegistryKeyPaths(withHkcu, spec({ deleteUserRegistryData: true }))).toEqual([
+      'SOFTWARE\\NI\\A0',
+      'HKCU\\SOFTWARE\\Native Instruments\\A',
+    ]);
+  });
+
+  it('never filters HKCR installer keys (machine-wide, always deleted)', () => {
+    const withInstaller = product('B', 0, 1);
+    withInstaller.registryKeyPaths.push('HKCR\\Installer\\Products\\AB469C61D2E7CE94697DA34179576106');
+    expect(deletableRegistryKeyPaths(withInstaller, spec({}))).toEqual([
+      'SOFTWARE\\NI\\B0',
+      'HKCR\\Installer\\Products\\AB469C61D2E7CE94697DA34179576106',
+    ]);
   });
 });
 

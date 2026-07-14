@@ -51,6 +51,7 @@ function spec(overrides: Partial<UninstallJobSpec>): UninstallJobSpec {
     backupEnabled: false,
     backupFolder: '',
     ignoreSpaceCheck: false,
+    deleteUserRegistryData: false,
     products: [
       {
         name: 'Super 8',
@@ -232,6 +233,39 @@ describe('UninstallJobRunner', () => {
     );
     expect(reporter.steps()).toBe(computeTotalSteps(jobSpec));
     expect(reporter.lines.some((l) => l.includes('backup only'))).toBe(true);
+  });
+
+  it('keeps HKCU keys by default: backed up, reported, not deleted (TODO12)', async () => {
+    const { runner, registryGuard, reporter } = makeRunner();
+    const jobSpec = spec({});
+    jobSpec.products[0].registryKeyPaths.push('HKCU\\SOFTWARE\\Native Instruments\\Super 8');
+    await runner.run(jobSpec);
+
+    expect(registryGuard.deleteKeyTree).toHaveBeenCalledWith(
+      'SOFTWARE\\WOW6432Node\\Native Instruments\\Super 8',
+    );
+    expect(registryGuard.deleteKeyTree).not.toHaveBeenCalledWith(
+      'HKCU\\SOFTWARE\\Native Instruments\\Super 8',
+    );
+    expect(
+      reporter.lines.some((l) =>
+        l.includes('Keeping HKCU\\SOFTWARE\\Native Instruments\\Super 8'),
+      ),
+    ).toBe(true);
+    // Step accounting stays consistent with computeTotalSteps.
+    expect(reporter.steps()).toBe(computeTotalSteps(jobSpec));
+  });
+
+  it('deletes HKCU keys when deleteUserRegistryData is set (TODO12)', async () => {
+    const { runner, registryGuard, reporter } = makeRunner();
+    const jobSpec = spec({ deleteUserRegistryData: true });
+    jobSpec.products[0].registryKeyPaths.push('HKCU\\SOFTWARE\\Native Instruments\\Super 8');
+    await runner.run(jobSpec);
+
+    expect(registryGuard.deleteKeyTree).toHaveBeenCalledWith(
+      'HKCU\\SOFTWARE\\Native Instruments\\Super 8',
+    );
+    expect(reporter.steps()).toBe(computeTotalSteps(jobSpec));
   });
 
   it('failed disk deletion names product, path and kind in the error', async () => {

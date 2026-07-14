@@ -76,6 +76,7 @@ export class UninstallService {
       backupEnabled: settings.backupEnabled,
       backupFolder: settings.backupFolder,
       ignoreSpaceCheck: settings.ignoreBackupSpaceCheck,
+      deleteUserRegistryData: settings.deleteUserRegistryData,
       products: products.map((product) =>
         toProductSpec(
           product,

@@ -19,6 +19,13 @@ export interface AppSettings {
   backupEnabled: boolean;
   /** Target folder for uninstall backups. Empty string means "not configured". */
   backupFolder: string;
+  /**
+   * When true, uninstall also deletes the product's per-user registry key
+   * (`HKCU\SOFTWARE\Native Instruments\<name>`). Off by default: the key is
+   * always shown in details and included in backup/restore, but only
+   * deleted with this opt-in (TODO12).
+   */
+  deleteUserRegistryData: boolean;
   /** When true, the free-space check before a backup is skipped (TODO7). */
   ignoreBackupSpaceCheck: boolean;
   /** When true, the per-device free-space check before a restore is skipped (TODO8). */

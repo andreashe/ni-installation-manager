@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dryRun: false,
   backupEnabled: false,
   backupFolder: '',
+  deleteUserRegistryData: false,
   ignoreBackupSpaceCheck: false,
   ignoreRestoreSpaceCheck: false,
   ignoreMoveSpaceCheck: false,

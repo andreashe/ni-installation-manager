@@ -1,6 +1,7 @@
 import { isBackupOnlyKind, isSharedContainerKind } from '../../shared/types/product';
 import type { ProductDiskPath, ProductDto, RegistryValueDto } from '../../shared/types/product';
 import type { JobMode } from '../../shared/types/uninstall';
+import { splitHiveKeyPath } from '../utils/registry-path';
 import type { Product } from '../models/Product';
 
 /**
@@ -33,7 +34,27 @@ export interface UninstallJobSpec {
   backupFolder: string;
   /** Skip the free-space check before backups (settings toggle, TODO7). */
   ignoreSpaceCheck: boolean;
+  /**
+   * Also delete the per-user HKCU product keys (settings toggle, TODO12).
+   * When false (default) those keys are kept — still backed up, though.
+   */
+  deleteUserRegistryData: boolean;
   products: UninstallProductSpec[];
+}
+
+/**
+ * The registry keys of one product that the deletion phase actually
+ * removes: HKCU keys (per-user data) only with the opt-in setting (TODO12).
+ * Used by the runner AND the step accounting — must stay in sync.
+ */
+export function deletableRegistryKeyPaths(
+  product: UninstallProductSpec,
+  spec: UninstallJobSpec,
+): string[] {
+  if (spec.deleteUserRegistryData) {
+    return product.registryKeyPaths;
+  }
+  return product.registryKeyPaths.filter((keyPath) => splitHiveKeyPath(keyPath).hive !== 'HKCU');
 }
 
 /**
@@ -65,9 +86,10 @@ export function computeTotalSteps(spec: UninstallJobSpec): number {
       total += product.diskPaths.length + 1;
     }
     if (spec.mode === 'uninstall') {
-      // Backup-only locations (Kontakt8ImageDir) are never deleted (TODO7).
+      // Backup-only locations (Kontakt8ImageDir) are never deleted (TODO7);
+      // HKCU keys only with the opt-in setting (TODO12).
       const deletable = product.diskPaths.filter((diskPath) => !isBackupOnlyKind(diskPath.kind));
-      total += deletable.length + product.registryKeyPaths.length;
+      total += deletable.length + deletableRegistryKeyPaths(product, spec).length;
     }
   }
   return total;

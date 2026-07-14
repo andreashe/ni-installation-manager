@@ -22,6 +22,8 @@ HKCR\Installer\Products\<hash>\                        (Windows Installer regist
 
 The installer key's subkey name is a random hash; it is located by enumerating `NI_INSTALLER_PRODUCTS_ROOT` once per scan and matching each key's `ProductName` value against `Native Instruments <ProductName>` (case-insensitive).
 
+**HKCU deletion is opt-in:** the per-user key is always shown in details and included in backup/restore, but uninstall only deletes it when the Preferences toggle "Also delete user data of instruments from registry" (`deleteUserRegistryData`, default off) is enabled. The filter lives in `deletableRegistryKeyPaths()` (`src/main/uninstall/uninstall-job.ts`), shared by the runner and the step accounting. HKLM and HKCR keys are always deleted.
+
 ### Hive-qualified key paths
 
 Key paths may carry a hive prefix (`HKLM\`, `HKCU\`, `HKCR\`); a **bare path means HKLM**. Parsing/formatting lives in `src/main/utils/registry-path.ts` (`splitHiveKeyPath`, `displayKeyPath` — the latter is used everywhere key paths are logged or shown). The bare-equals-HKLM default keeps registry backups from before this convention restorable unchanged.

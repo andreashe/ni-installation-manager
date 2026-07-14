@@ -77,6 +77,21 @@ export const PreferencesPage = observer(function PreferencesPage() {
 
         <div className="pref-row">
           <div className="pref-text">
+            <div className="pref-title">Also delete user data of instruments from registry</div>
+            <div className="pref-desc">
+              Uninstall also removes the product&apos;s per-user key (may hold user data)
+            </div>
+          </div>
+          <Toggle
+            on={current.deleteUserRegistryData}
+            onToggle={() =>
+              settings.update({ deleteUserRegistryData: !current.deleteUserRegistryData })
+            }
+          />
+        </div>
+
+        <div className="pref-row">
+          <div className="pref-text">
             <div className="pref-title">Ignore space check for backup</div>
             <div className="pref-desc">
               Skip the free-disk-space check on the backup target before backing up.
