@@ -15,13 +15,19 @@ import { Spinner } from '../components/Spinner';
 export const InstalledPage = observer(function InstalledPage() {
   const { products, uninstall, settings, ui } = useStores();
   const [query, setQuery] = useState('');
+  const [bookmarksOnly, setBookmarksOnly] = useState(false);
   const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(new Set());
 
   // Frontend-only search (PLAN.md §4.1): filter by name, case-insensitive.
+  // The bookmark filter narrows further to bookmarked products.
+  const bookmarkedProducts = settings.settings.bookmarkedProducts;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? products.products.filter((p) => p.name.toLowerCase().includes(q)) : products.products;
-  }, [products.products, query]);
+    const matching = q
+      ? products.products.filter((p) => p.name.toLowerCase().includes(q))
+      : products.products;
+    return bookmarksOnly ? matching.filter((p) => bookmarkedProducts.includes(p.name)) : matching;
+  }, [products.products, query, bookmarksOnly, bookmarkedProducts]);
 
   const selectable = visible.filter((p) => p.removable);
   const selectedVisible = selectable.filter((p) => selectedNames.has(p.name));
@@ -124,6 +130,15 @@ export const InstalledPage = observer(function InstalledPage() {
           )}
         </div>
 
+        <button
+          type="button"
+          className={`bookmark-button bookmark-filter${bookmarksOnly ? ' bookmarked' : ''}`}
+          title={bookmarksOnly ? 'Show all products' : 'Show only bookmarked products'}
+          onClick={() => setBookmarksOnly((previous) => !previous)}
+        >
+          <Icon name="bookmark" size={17} />
+        </button>
+
         <div style={{ flex: 1 }} />
 
         <button
@@ -161,7 +176,9 @@ export const InstalledPage = observer(function InstalledPage() {
             key={product.name}
             product={product}
             selected={selectedNames.has(product.name)}
+            bookmarked={settings.isBookmarked(product.name)}
             onToggle={() => toggleOne(product.name)}
+            onToggleBookmark={() => void settings.toggleBookmark(product.name)}
             onUninstall={() => startUninstall([product.name])}
             onBackup={() => startBackup([product.name])}
             onMove={() => openMove([product.name])}

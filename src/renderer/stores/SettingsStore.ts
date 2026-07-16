@@ -38,6 +38,19 @@ export class SettingsStore {
     this.applyState(state);
   }
 
+  /** True when the product is bookmarked on the Installed page. */
+  isBookmarked(productName: string): boolean {
+    return this.settings.bookmarkedProducts.includes(productName);
+  }
+
+  /** Bookmark or un-bookmark a product; persisted via the settings IPC. */
+  async toggleBookmark(productName: string): Promise<void> {
+    const bookmarkedProducts = this.isBookmarked(productName)
+      ? this.settings.bookmarkedProducts.filter((name) => name !== productName)
+      : [...this.settings.bookmarkedProducts, productName];
+    await this.update({ bookmarkedProducts });
+  }
+
   /** Apply an authoritative state snapshot received from the main process. */
   private applyState(state: SettingsState): void {
     runInAction(() => {

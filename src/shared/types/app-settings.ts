@@ -34,6 +34,12 @@ export interface AppSettings {
   ignoreMoveSpaceCheck: boolean;
   /** Minimum severity written by the central logger. */
   logLevel: LogLevel;
+  /**
+   * Names of products the user bookmarked on the Installed page. Persisted
+   * with the other settings so bookmarks survive restarts; toggled from the
+   * product rows and used by the bookmark filter in the list toolbar.
+   */
+  bookmarkedProducts: string[];
 }
 
 /**

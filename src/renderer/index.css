@@ -410,6 +410,46 @@ button {
   flex-basis: 128px;
 }
 
+/* Bookmark toggle: outline icon, filled yellow when bookmarked/active. */
+.bookmark-button {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.bookmark-button:hover {
+  background: var(--bg-active);
+  color: #fff;
+}
+
+.bookmark-button.bookmarked {
+  color: #f0c22c;
+}
+
+.bookmark-button.bookmarked svg {
+  fill: currentColor;
+}
+
+/* Bookmark filter in the list toolbar gets a button-like border. */
+.bookmark-filter {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+}
+
+.bookmark-filter.bookmarked {
+  border-color: #f0c22c;
+}
+
 /* Inline text link used e.g. by the Restore page hint to open Preferences. */
 .link-button {
   border: none;

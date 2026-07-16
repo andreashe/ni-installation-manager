@@ -1,4 +1,4 @@
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, toJS } from 'mobx';
 import type { AppSettings, SettingsState } from '../../shared/types/app-settings';
 import { DEFAULT_SETTINGS } from '../../config/default.config';
 
@@ -45,10 +45,14 @@ export class SettingsStore {
     this.dryRunForcedByCli = forced;
   }
 
-  /** Serializable snapshot sent over IPC to the renderer mirror store. */
+  /**
+   * Serializable snapshot sent over IPC to the renderer mirror store.
+   * `toJS` strips the MobX proxies (a shallow spread would keep nested
+   * observables like `bookmarkedProducts`, which breaks structured clone).
+   */
   toState(): SettingsState {
     return {
-      settings: { ...this.settings },
+      settings: toJS(this.settings),
       dryRunForcedByCli: this.dryRunForcedByCli,
       effectiveDryRun: this.effectiveDryRun,
     };

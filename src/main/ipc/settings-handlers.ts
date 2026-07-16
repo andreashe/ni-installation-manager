@@ -51,5 +51,11 @@ function sanitizeSettingsPartial(raw: unknown): Partial<AppSettings> {
   ) {
     result.logLevel = candidate.logLevel as AppSettings['logLevel'];
   }
+  if (
+    Array.isArray(candidate.bookmarkedProducts) &&
+    candidate.bookmarkedProducts.every((entry) => typeof entry === 'string')
+  ) {
+    result.bookmarkedProducts = [...new Set(candidate.bookmarkedProducts as string[])];
+  }
   return result;
 }

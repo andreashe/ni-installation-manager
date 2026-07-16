@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ignoreRestoreSpaceCheck: false,
   ignoreMoveSpaceCheck: false,
   logLevel: 'info',
+  bookmarkedProducts: [],
 };
 
 /**

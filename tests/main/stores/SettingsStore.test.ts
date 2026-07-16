@@ -39,4 +39,12 @@ describe('SettingsStore', () => {
     expect(state.dryRunForcedByCli).toBe(true);
     expect(state.settings).not.toBe(store.settings); // copy, not the live object
   });
+
+  it('toState is structured-cloneable (no MobX proxies survive, e.g. bookmarkedProducts)', () => {
+    const store = new SettingsStore();
+    store.applyPartial({ bookmarkedProducts: ['Kontakt 7'] });
+    // Electron IPC uses the structured clone algorithm; observable arrays break it.
+    const cloned = structuredClone(store.toState());
+    expect(cloned.settings.bookmarkedProducts).toEqual(['Kontakt 7']);
+  });
 });

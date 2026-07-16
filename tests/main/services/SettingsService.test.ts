@@ -51,6 +51,7 @@ describe('SettingsService.load', () => {
       ignoreRestoreSpaceCheck: false,
       ignoreMoveSpaceCheck: false,
       logLevel: 'info',
+      bookmarkedProducts: [],
     });
   });
 
@@ -87,5 +88,17 @@ describe('SettingsService.update', () => {
     expect(store.settings.backupFolder).toBe('D:\\Backup');
     expect(written).not.toBeNull();
     expect(JSON.parse(written as string).backupFolder).toBe('D:\\Backup');
+  });
+
+  it('persists bookmarked products and loads them back', () => {
+    const { service } = makeService();
+    service.load([]);
+    service.update({ bookmarkedProducts: ['Kontakt 7', 'Massive X'] });
+    expect(JSON.parse(written as string).bookmarkedProducts).toEqual(['Kontakt 7', 'Massive X']);
+
+    fileContent = written;
+    const { store: reloaded, service: second } = makeService();
+    second.load([]);
+    expect(reloaded.settings.bookmarkedProducts).toEqual(['Kontakt 7', 'Massive X']);
   });
 });

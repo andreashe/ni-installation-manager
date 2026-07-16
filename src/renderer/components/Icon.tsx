@@ -14,7 +14,8 @@ export type IconName =
   | 'check'
   | 'harddrive'
   | 'archive'
-  | 'restore';
+  | 'restore'
+  | 'bookmark';
 
 /** SVG path fragments per icon, extracted from the design mockup style (feather-like). */
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
@@ -101,6 +102,8 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3 3v6h6" />
     </>
   ),
+  // Outline only by default; the bookmarked state fills it via CSS (`fill`).
+  bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />,
 };
 
 /**

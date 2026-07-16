@@ -3,18 +3,21 @@ import React from 'react';
 import type { ProductDto } from '../../shared/types/product';
 import { formatBytes } from '../utils/format';
 import { Checkbox } from './Checkbox';
+import { Icon } from './Icon';
 import altArtworkUrl from '../assets/MST_artwork_alt.png';
 
 /**
- * One row of the product list: checkbox, artwork, name, version, disk
- * usage, per-product uninstall button. Row click toggles selection.
- * Non-removable products (no removal-relevant registry values) cannot be
- * selected or uninstalled.
+ * One row of the product list: checkbox, artwork, name, bookmark toggle,
+ * version, disk usage, per-product uninstall button. Row click toggles
+ * selection. Non-removable products (no removal-relevant registry values)
+ * cannot be selected or uninstalled.
  */
 export const ProductRow = observer(function ProductRow({
   product,
   selected,
+  bookmarked,
   onToggle,
+  onToggleBookmark,
   onUninstall,
   onBackup,
   onMove,
@@ -24,7 +27,10 @@ export const ProductRow = observer(function ProductRow({
 }: {
   product: ProductDto;
   selected: boolean;
+  /** True when the product is bookmarked (filled yellow icon). */
+  bookmarked: boolean;
   onToggle: () => void;
+  onToggleBookmark: () => void;
   onUninstall: () => void;
   onBackup: () => void;
   onMove: () => void;
@@ -44,6 +50,17 @@ export const ProductRow = observer(function ProductRow({
       <div className="product-name" title={product.name}>
         {product.name}
       </div>
+      <button
+        type="button"
+        className={`bookmark-button${bookmarked ? ' bookmarked' : ''}`}
+        title={bookmarked ? 'Remove bookmark' : 'Bookmark this product'}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleBookmark();
+        }}
+      >
+        <Icon name="bookmark" size={17} />
+      </button>
       <div className="product-meta">{product.version ?? '—'}</div>
       <div className="product-meta">
         {product.diskUsageBytes === null ? '…' : formatBytes(product.diskUsageBytes)}

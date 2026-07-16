@@ -41,6 +41,7 @@ Currently synchronized: settings (`settings:changed`), products (`products:chang
 - Loaded at startup **before** window creation; missing keys are filled from `DEFAULT_SETTINGS` (`src/config/default.config.ts`).
 - Renderer changes a preference → `window.api.settings.update(partial)` → validated → store updated → persisted → new state pushed back to all windows.
 - `--dry-run` CLI flag forces dry-run for the current run without touching the stored setting (`SettingsState.dryRunForcedByCli`).
+- Product bookmarks (Installed page: bookmark icon per row, bookmark filter in the toolbar) ride on the same pipeline: `AppSettings.bookmarkedProducts` (string array of product names), toggled via `SettingsStore.toggleBookmark` (renderer) and persisted like any other setting — no separate store or file.
 
 ## Logging
 
