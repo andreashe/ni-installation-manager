@@ -3,10 +3,14 @@ name: Publish Windows Installer
 # Builds the Windows installer and publishes it as a downloadable GitHub
 # release asset whenever the "publish" branch is updated. The Squirrel
 # installer filename is fixed (no version) in forge.config.ts, and this
-# workflow always (re-)creates the same "publish" release/tag, so the
+# workflow always (re-)creates the same "latest" release/tag, so the
 # stable URL below always serves the newest build:
 #
 #   https://github.com/<owner>/<repo>/releases/latest/download/NI-Installation-Manager-Setup.exe
+#
+# NOTE: the release tag must NOT be named like an existing branch — a tag
+# named "publish" (same as the trigger branch) makes the GitHub release
+# API fail with an HTML 500 ("Unicorn!") on fetch/create.
 
 on:
   push:
@@ -21,12 +25,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -46,7 +50,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: publish
+          tag_name: latest
           name: Latest Windows Build
           make_latest: true
           fail_on_unmatched_files: true
