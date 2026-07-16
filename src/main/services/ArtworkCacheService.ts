@@ -1,9 +1,18 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { NI_COMMON_FILES_BASE, NI_PUBLIC_RESOURCES_IMAGE_BASE } from '../../config/ni.config';
+import {
+  ARTWORK_SCAN_CACHE_FILE_NAME,
+  ARTWORK_SCAN_MAX_AGE_DAYS,
+} from '../../config/assets.config';
+import {
+  NI_COMMON_FILES_BASE,
+  NI_HOST_IMAGE_DIR_RULES,
+  NI_PUBLIC_RESOURCES_IMAGE_BASE,
+} from '../../config/ni.config';
 import type { Product } from '../models/Product';
 import type { ProductStore } from '../stores/ProductStore';
+import type { SettingsStore } from '../stores/SettingsStore';
 import type { ArtworkFetcher } from '../utils/ArtworkImageProcessor';
 import type { LoggerService } from './LoggerService';
 
@@ -18,6 +27,49 @@ const ARTWORK_CANDIDATES = ['MST_artwork.png', 'MST_logo.png', 'VB_artwork.png']
 /** Recursion cap for the artwork walk — the NI trees are shallow (< 6 levels). */
 const MAX_SCAN_DEPTH = 10;
 
+/** One remembered scan hit: best artwork file for a product key. */
+interface ArtworkScanCacheEntry {
+  filePath: string;
+  /** Index in ARTWORK_CANDIDATES (lower = better), kept for re-competition. */
+  priority: number;
+}
+
+/**
+ * On-disk shape of the artwork scan cache (`artwork-scan.json` inside the
+ * assets cache folder): the artwork hits per product key plus the scanned
+ * base subfolders with the timestamp of the scan that covered them.
+ */
+interface ArtworkScanCacheFile {
+  version: number;
+  products: Record<string, ArtworkScanCacheEntry>;
+  /** Normalized folder path → ISO timestamp of the scan that walked it. */
+  scannedFolders: Record<string, string>;
+}
+
+/**
+ * All artwork scan roots. The host image dirs (`Kontakt 8\PAResources\image`
+ * etc.) are OWN bases: excluded from the `NI_COMMON_FILES_BASE` walk, their
+ * direct subfolders tracked individually in the scanned-folders cache.
+ */
+const ARTWORK_SCAN_BASES: readonly string[] = [
+  NI_COMMON_FILES_BASE,
+  NI_PUBLIC_RESOURCES_IMAGE_BASE,
+  ...NI_HOST_IMAGE_DIR_RULES.map((rule) => rule.base),
+];
+
+/** Normalized keys of the own-base roots, checked during the walk. */
+const ARTWORK_OWN_BASE_KEYS: ReadonlySet<string> = new Set(
+  NI_HOST_IMAGE_DIR_RULES.map((rule) => normalizeFolderKey(rule.base)),
+);
+
+/** Folder state shared across one scan run (skip decisions + bookkeeping). */
+interface ArtworkScanRun {
+  /** Base subfolders whose previous scan is still fresh — not walked again. */
+  skipFolders: ReadonlySet<string>;
+  /** Base subfolders actually walked in this run (get a new timestamp). */
+  scannedNow: Set<string>;
+}
+
 /**
  * Finds product artwork on disk and copies it into the frontend assets
  * cache so the renderer can display it via the `ni-assets://` protocol
@@ -29,6 +81,14 @@ const MAX_SCAN_DEPTH = 10;
  * as one product, keyed by its lower-cased folder name
  * (`imagesOnDiskByProductName`). Products are then matched against that map
  * case-insensitively. Triggered by `ProductScanService` after every scan.
+ *
+ * Scan results are cached in `artwork-scan.json` inside the assets cache
+ * folder: artwork hits plus every scanned direct base subfolder with a
+ * timestamp. The next scan skips folders scanned less than
+ * `ARTWORK_SCAN_MAX_AGE_DAYS` ago (including their subfolders) and reuses
+ * the remembered hits — unless the "Do always full artwork scan" preference
+ * is enabled. "Clear cache" wipes the folder including this file, forcing a
+ * full rescan.
  */
 export class ArtworkCacheService {
   /** Lower-cased product name → CDN URL (from `src/config/na_cdn-assets.json`). */
@@ -36,6 +96,7 @@ export class ArtworkCacheService {
 
   constructor(
     private readonly productStore: ProductStore,
+    private readonly settingsStore: SettingsStore,
     private readonly logger: LoggerService,
     private readonly cacheFolder: string,
     cdnAssets: Record<string, string>,
@@ -144,14 +205,54 @@ export class ArtworkCacheService {
    * Walk both artwork roots and map lower-cased product-folder names to the
    * best artwork file found directly inside them (TODO5). The status bar
    * shows each directory while it is scanned.
+   *
+   * Scan cache: hits and scanned folders of previous runs are loaded from
+   * `artwork-scan.json` first. Direct base subfolders scanned less than
+   * `ARTWORK_SCAN_MAX_AGE_DAYS` ago are skipped (including their
+   * subfolders) and their hits reused — unless the "Do always full artwork
+   * scan" preference is on. After the walk the merged hits and the updated
+   * folder timestamps are written back for the next scan.
    */
   private async scanArtworkOnDisk(): Promise<Map<string, string>> {
     /** value: artwork path + its index in ARTWORK_CANDIDATES (lower = better). */
-    const best = new Map<string, { filePath: string; priority: number }>();
+    const { best, scannedFolders } = await this.loadScanCache();
+    const now = new Date();
 
-    for (const root of [NI_COMMON_FILES_BASE, NI_PUBLIC_RESOURCES_IMAGE_BASE]) {
-      await this.walkForArtwork(root, best, 0);
+    const skipFolders = new Set<string>();
+    if (!this.settingsStore.settings.alwaysFullArtworkScan) {
+      const maxAgeMs = ARTWORK_SCAN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+      for (const [folderKey, scannedAt] of scannedFolders) {
+        const age = now.getTime() - Date.parse(scannedAt);
+        if (Number.isFinite(age) && age >= 0 && age < maxAgeMs) {
+          skipFolders.add(folderKey);
+        }
+      }
     }
+    if (skipFolders.size > 0) {
+      this.logger.info(
+        `Artwork scan cache: skipping ${skipFolders.size} folder(s) scanned previously`,
+        LOG_SOURCE,
+      );
+    }
+
+    const run: ArtworkScanRun = { skipFolders, scannedNow: new Set() };
+    for (const root of ARTWORK_SCAN_BASES) {
+      await this.walkForArtwork(root, best, 0, run);
+    }
+
+    // Skipped folders keep their old timestamp, walked folders get a new one;
+    // folders that vanished from disk drop out (not skipped, not walked).
+    const nextScannedFolders = new Map<string, string>();
+    for (const [folderKey, scannedAt] of scannedFolders) {
+      if (skipFolders.has(folderKey)) {
+        nextScannedFolders.set(folderKey, scannedAt);
+      }
+    }
+    for (const folderKey of run.scannedNow) {
+      nextScannedFolders.set(folderKey, now.toISOString());
+    }
+
+    await this.saveScanCache(best, nextScannedFolders);
 
     const result = new Map<string, string>();
     for (const [productKey, entry] of best) {
@@ -160,14 +261,95 @@ export class ArtworkCacheService {
     return result;
   }
 
-  /** Depth-first artwork search; unreadable folders and symlinks are skipped. */
+  /** Path of the scan cache file (lives inside the assets cache folder, so "Clear cache" removes it too). */
+  private get scanCacheFilePath(): string {
+    return path.join(this.cacheFolder, ARTWORK_SCAN_CACHE_FILE_NAME);
+  }
+
+  /**
+   * Load the previous scans' state: artwork hits (entries whose file
+   * disappeared are dropped) and the scanned-folders timestamps.
+   * Missing/corrupt file → empty result (full scan).
+   */
+  private async loadScanCache(): Promise<{
+    best: Map<string, { filePath: string; priority: number }>;
+    scannedFolders: Map<string, string>;
+  }> {
+    const best = new Map<string, { filePath: string; priority: number }>();
+    const scannedFolders = new Map<string, string>();
+
+    let parsed: ArtworkScanCacheFile;
+    try {
+      parsed = JSON.parse(
+        await fs.promises.readFile(this.scanCacheFilePath, 'utf8'),
+      ) as ArtworkScanCacheFile;
+    } catch {
+      return { best, scannedFolders }; // no cache yet (or unreadable) — full scan
+    }
+    if (typeof parsed !== 'object' || parsed === null) {
+      return { best, scannedFolders };
+    }
+
+    if (typeof parsed.products === 'object' && parsed.products !== null) {
+      for (const [productKey, entry] of Object.entries(parsed.products)) {
+        if (typeof entry?.filePath !== 'string' || typeof entry?.priority !== 'number') {
+          continue;
+        }
+        if (!(await pathExists(entry.filePath))) {
+          continue; // artwork gone — forget the stale hit
+        }
+        best.set(productKey, { filePath: entry.filePath, priority: entry.priority });
+      }
+    }
+
+    if (typeof parsed.scannedFolders === 'object' && parsed.scannedFolders !== null) {
+      for (const [folder, scannedAt] of Object.entries(parsed.scannedFolders)) {
+        if (typeof scannedAt === 'string') {
+          scannedFolders.set(normalizeFolderKey(folder), scannedAt);
+        }
+      }
+    }
+    return { best, scannedFolders };
+  }
+
+  /** Persist the merged scan result for the next run; failures only warn. */
+  private async saveScanCache(
+    best: Map<string, { filePath: string; priority: number }>,
+    scannedFolders: Map<string, string>,
+  ): Promise<void> {
+    const file: ArtworkScanCacheFile = {
+      version: 2,
+      products: Object.fromEntries(best),
+      scannedFolders: Object.fromEntries(scannedFolders),
+    };
+    try {
+      await fs.promises.writeFile(this.scanCacheFilePath, JSON.stringify(file, null, 2), 'utf8');
+    } catch (error) {
+      this.logger.warn(`Could not write artwork scan cache: ${String(error)}`, LOG_SOURCE);
+    }
+  }
+
+  /**
+   * Depth-first artwork search; unreadable folders and symlinks are skipped.
+   * Depth is relative to the scan base: own bases (host image dirs) are
+   * excluded from a parent base's walk, and direct base subfolders
+   * (depth 1) are the units the scanned-folders cache skips and stamps.
+   */
   private async walkForArtwork(
     dir: string,
     best: Map<string, { filePath: string; priority: number }>,
     depth: number,
+    run: ArtworkScanRun,
   ): Promise<void> {
     if (depth > MAX_SCAN_DEPTH) {
       return;
+    }
+    const folderKey = normalizeFolderKey(dir);
+    if (depth > 0 && ARTWORK_OWN_BASE_KEYS.has(folderKey)) {
+      return; // own scan base — walked separately, not part of this subtree
+    }
+    if (depth === 1 && run.skipFolders.has(folderKey)) {
+      return; // folder (and subtree) scanned recently enough
     }
     this.productStore.setStatusText(`Scanning artwork: ${dir}`);
     this.logger.debug(`Scanning artwork folder: ${dir}`, LOG_SOURCE);
@@ -178,13 +360,16 @@ export class ArtworkCacheService {
     } catch {
       return; // root or subfolder missing/unreadable — nothing to scan here
     }
+    if (depth === 1) {
+      run.scannedNow.add(folderKey);
+    }
 
     for (const entry of entries) {
       if (entry.isSymbolicLink()) {
         continue;
       }
       if (entry.isDirectory()) {
-        await this.walkForArtwork(path.join(dir, entry.name), best, depth + 1);
+        await this.walkForArtwork(path.join(dir, entry.name), best, depth + 1, run);
         continue;
       }
       const priority = ARTWORK_CANDIDATES.findIndex(
@@ -337,6 +522,11 @@ export class ArtworkCacheService {
 /** Replace characters Windows forbids in file names so any product name maps to a cache file. */
 function sanitizeFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*]/g, '_');
+}
+
+/** Comparable folder identity for the scan-cache skip set (Windows: case-insensitive). */
+function normalizeFolderKey(folder: string): string {
+  return path.normalize(folder).toLowerCase();
 }
 
 async function pathExists(candidate: string): Promise<boolean> {

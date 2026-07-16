@@ -19,6 +19,7 @@ src/
 │   │   ├── move-handlers.ts     # move:get-targets / move:start
 │   │   ├── payload-sanitizers.ts# Shared IPC payload sanitizers (names, rename patterns)
 │   │   ├── dialog-handlers.ts   # dialog:select-folder (backup folder picker)
+│   │   ├── app-handlers.ts      # app:get-version (About page, from app.getVersion())
 │   │   ├── log-handlers.ts      # log:from-renderer → central logger
 │   │   ├── store-sync.ts        # MobX reactions: main stores → renderer pushes
 │   │   └── renderer-push.ts     # broadcastToRenderers() helper

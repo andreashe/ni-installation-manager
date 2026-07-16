@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ignoreBackupSpaceCheck: false,
   ignoreRestoreSpaceCheck: false,
   ignoreMoveSpaceCheck: false,
+  alwaysFullArtworkScan: false,
   logLevel: 'info',
   bookmarkedProducts: [],
 };

@@ -100,9 +100,10 @@ export const NI_PUBLIC_RESOURCES_IMAGE_BASE =
  * Product imagery inside NI host installations (TODO7):
  * `<NI_COMMON_FILES_BASE>\<host>\PAResources\image\<ProductName>` —
  * attached under the given kind when the folder exists. All of these are
- * BACKUP_ONLY_KINDS: backed up and counted, never deleted. The recursive
- * artwork scan covers them automatically (they live under
- * `NI_COMMON_FILES_BASE`).
+ * BACKUP_ONLY_KINDS: backed up and counted, never deleted. The artwork scan
+ * treats each of these bases as an OWN scan root: they are excluded from the
+ * `NI_COMMON_FILES_BASE` walk and their direct subfolders are tracked
+ * individually in the scanned-folders cache (see `ArtworkCacheService`).
  */
 export const NI_HOST_IMAGE_DIR_RULES: ReadonlyArray<{
   kind: Extract<

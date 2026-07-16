@@ -84,6 +84,7 @@ export function createAppContext(cliArgs: readonly string[]): AppContext {
   const productStore = new ProductStore();
   const artworkCacheService = new ArtworkCacheService(
     productStore,
+    settingsStore,
     logger,
     getFrontendAssetsCachePath(),
     cdnAssets,

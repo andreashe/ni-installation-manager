@@ -82,6 +82,10 @@ export interface WindowApi {
     /** Native folder picker (Preferences → backup folder); null when cancelled. */
     selectFolder(): Promise<string | null>;
   };
+  app: {
+    /** Application version (package.json in dev, app metadata packaged) — About page. */
+    getVersion(): Promise<string>;
+  };
   cache: {
     /** Clear the frontend assets cache; product images fall back to the alt image. */
     clear(): Promise<void>;

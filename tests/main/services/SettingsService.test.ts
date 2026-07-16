@@ -50,6 +50,7 @@ describe('SettingsService.load', () => {
       ignoreBackupSpaceCheck: false,
       ignoreRestoreSpaceCheck: false,
       ignoreMoveSpaceCheck: false,
+      alwaysFullArtworkScan: false,
       logLevel: 'info',
       bookmarkedProducts: [],
     });

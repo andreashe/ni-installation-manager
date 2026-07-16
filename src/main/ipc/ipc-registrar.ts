@@ -1,4 +1,5 @@
 import type { AppContext } from '../app-context';
+import { registerAppHandlers } from './app-handlers';
 import { registerCacheHandlers } from './cache-handlers';
 import { registerDialogHandlers } from './dialog-handlers';
 import { registerLogHandlers } from './log-handlers';
@@ -21,5 +22,6 @@ export function registerAllIpcHandlers(context: AppContext): void {
   registerMoveHandlers(context);
   registerCacheHandlers(context);
   registerDialogHandlers();
+  registerAppHandlers();
   registerLogHandlers(context);
 }

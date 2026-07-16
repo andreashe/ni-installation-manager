@@ -32,6 +32,11 @@ export interface AppSettings {
   ignoreRestoreSpaceCheck: boolean;
   /** When true, the per-device free-space check before a move is skipped (TODO10). */
   ignoreMoveSpaceCheck: boolean;
+  /**
+   * When true, the artwork scan ignores the scanned-folders cache and always
+   * walks all artwork roots completely.
+   */
+  alwaysFullArtworkScan: boolean;
   /** Minimum severity written by the central logger. */
   logLevel: LogLevel;
   /**

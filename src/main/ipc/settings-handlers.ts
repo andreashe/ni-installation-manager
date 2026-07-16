@@ -25,6 +25,7 @@ const BOOLEAN_SETTING_KEYS = [
   'ignoreBackupSpaceCheck',
   'ignoreRestoreSpaceCheck',
   'ignoreMoveSpaceCheck',
+  'alwaysFullArtworkScan',
 ] as const;
 
 /**

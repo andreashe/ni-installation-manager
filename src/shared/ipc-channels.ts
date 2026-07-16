@@ -67,6 +67,10 @@ export const IpcChannels = {
     /** Query (invoke): open a native folder picker; resolves with the path or null. */
     selectFolder: 'dialog:select-folder',
   },
+  app: {
+    /** Query (invoke): application version from package.json / app metadata (About page). */
+    getVersion: 'app:get-version',
+  },
   cache: {
     /** Command (invoke): clear the frontend assets cache (Preferences button). */
     clear: 'cache:clear',

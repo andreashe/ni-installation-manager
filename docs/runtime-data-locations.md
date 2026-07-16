@@ -23,6 +23,7 @@ This is `app.getPath('userData')`; the folder name comes from `productName` in `
 | Log file, elevated restore worker | `logs\restore-worker.log` | `getLogFolderPath()` + fixed name | `restore-worker.ts` |
 | Log file, elevated move worker | `logs\move-worker.log` | `getLogFolderPath()` + fixed name | `move-worker.ts` |
 | **Assets cache** (product artwork) | `assets-cache\` | `getFrontendAssetsCachePath()` | `ArtworkCacheService`; served to the renderer via the `ni-assets://` protocol. Cleared by Preferences → "Clear cache", rebuilt on next scan |
+| **Artwork scan cache** | `assets-cache\artwork-scan.json` | `ARTWORK_SCAN_CACHE_FILE_NAME` (`assets.config.ts`) | `ArtworkCacheService`; artwork hits + scanned base subfolders with timestamp — skipped (incl. subfolders) for 365 days unless "Do always full artwork scan" is on. Removed with the assets cache by "Clear cache" |
 | **Disk usage cache** (per-product sizes) | `ProductDiskUsageCache\<md5(product name)>.json` | `getProductDiskUsageCachePath()` | `ProductDiskUsageCache` (bytes + scan time + product version). Cleared by the Installed reload button, Preferences → "Clear cache" and after real restores |
 | Elevated job files | `uninstall-jobs\<mode>-<timestamp>\job.json` + `progress.jsonl` | `getUninstallJobsPath()` | `UninstallService` / `RestoreService` / `MoveService` write `job.json`; the elevated worker streams `progress.jsonl` |
 

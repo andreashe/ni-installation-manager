@@ -1,13 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 /** Placeholder repository URL until a real project page exists (PLAN.md §4.5). */
 const PROJECT_URL = 'https://github.com/andreashe/ni-installation-manager';
 
 /**
- * About page (PLAN.md §4.5): unofficial-status disclaimer, project link,
- * license note. Static content, no store access.
+ * About page (PLAN.md §4.5): version, unofficial-status disclaimer, project
+ * link, license note. The version comes from main via IPC
+ * (`app.getVersion()` → package.json), so it is never duplicated in source.
  */
 export function AboutPage() {
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    void window.api.app.getVersion().then(setVersion);
+  }, []);
+
   return (
     <>
       <div className="page-header">
@@ -16,8 +23,10 @@ export function AboutPage() {
 
       <div className="about-body">
         <p>
-          <strong>NI Installation Manager</strong> is an independent, community-built tool to
-          inspect and uninstall Native Instruments products.
+          <strong>NI Installation Manager</strong>
+          {version !== '' && <span className="about-version"> — Version {version}</span>}
+          {' '}is an independent, community-built tool to inspect and uninstall Native
+          Instruments products.
         </p>
 
         <h2>Not an official Native Instruments application</h2>

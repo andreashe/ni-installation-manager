@@ -135,6 +135,21 @@ export const PreferencesPage = observer(function PreferencesPage() {
 
         <div className="pref-row">
           <div className="pref-text">
+            <div className="pref-title">Do always full artwork scan</div>
+            <div className="pref-desc">
+              Ignore the scanned-folders cache and walk all artwork folders on every reload.
+            </div>
+          </div>
+          <Toggle
+            on={current.alwaysFullArtworkScan}
+            onToggle={() =>
+              settings.update({ alwaysFullArtworkScan: !current.alwaysFullArtworkScan })
+            }
+          />
+        </div>
+
+        <div className="pref-row">
+          <div className="pref-text">
             <div className="pref-title">Log level</div>
             <div className="pref-desc">Minimum severity written to the log file and log panel.</div>
           </div>
@@ -168,7 +183,7 @@ export const PreferencesPage = observer(function PreferencesPage() {
             <div className="pref-title">Clear cache</div>
             <div className="pref-desc">
               Removes all cached product images and product disk usage cache files. They are rebuilt
-              (disk scan / CDN download) on the next reload.
+              on the next reload.
             </div>
           </div>
           <button type="button" className="row-button" onClick={() => void window.api.cache.clear()}>

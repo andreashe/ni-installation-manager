@@ -8,6 +8,7 @@ import {
 import { ArtworkCacheService } from '../../../src/main/services/ArtworkCacheService';
 import { Product } from '../../../src/main/models/Product';
 import { ProductStore } from '../../../src/main/stores/ProductStore';
+import { SettingsStore } from '../../../src/main/stores/SettingsStore';
 import type { LoggerService } from '../../../src/main/services/LoggerService';
 
 const CACHE = 'C:\\fake\\assets-cache';
@@ -20,10 +21,16 @@ let existingFiles: Set<string>;
 let copies: [string, string][];
 /** Recorded writeFile calls (CDN downloads): target paths. */
 let writes: string[];
+/** Content of the artwork scan cache file; null = file does not exist. */
+let scanCacheContent: string | null;
+/** Content written to the artwork scan cache file (last write wins). */
+let scanCacheWritten: string | null;
 /** URLs requested from the fake CDN fetcher. */
 let fetchedUrls: string[];
 /** Temp file paths handed to the fake wallpaper resizer. */
 let resizedWallpapers: string[];
+
+const SCAN_CACHE_FILE = path.join(CACHE, 'artwork-scan.json');
 
 function addDir(dirPath: string, entries: { name: string; dir: boolean }[]): void {
   tree.set(path.normalize(dirPath), entries);
@@ -41,7 +48,10 @@ function makeService(
   store: ProductStore,
   cdnAssets: Record<string, string> = {},
   fetcherFails = false,
+  alwaysFullArtworkScan = false,
 ) {
+  const settingsStore = new SettingsStore();
+  settingsStore.applyPartial({ alwaysFullArtworkScan });
   const fetcher = {
     fetchAndResize: vi.fn(async (url: string) => {
       fetchedUrls.push(url);
@@ -57,6 +67,7 @@ function makeService(
   };
   const service = new ArtworkCacheService(
     store,
+    settingsStore,
     makeLogger() as unknown as LoggerService,
     CACHE,
     cdnAssets,
@@ -70,12 +81,24 @@ beforeEach(() => {
   existingFiles = new Set();
   copies = [];
   writes = [];
+  scanCacheContent = null;
+  scanCacheWritten = null;
   fetchedUrls = [];
   resizedWallpapers = [];
 
-  vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (target) => {
-    writes.push(String(target));
+  vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (target, data) => {
+    if (path.normalize(String(target)) === path.normalize(SCAN_CACHE_FILE)) {
+      scanCacheWritten = String(data);
+    } else {
+      writes.push(String(target));
+    }
   });
+  vi.spyOn(fs.promises, 'readFile').mockImplementation((async (target: fs.PathLike) => {
+    if (path.normalize(String(target)) === path.normalize(SCAN_CACHE_FILE) && scanCacheContent !== null) {
+      return scanCacheContent;
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  }) as unknown as typeof fs.promises.readFile);
   vi.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
   // Overload resolution picks the buffer variant — the loose cast keeps the
   // virtual-tree mock simple; the service only uses name + type predicates.
@@ -233,6 +256,136 @@ describe('ArtworkCacheService (recursive scan, TODO5)', () => {
       ],
     ]);
     expect(store.products.every((p) => p.artworkCacheFileName !== null)).toBe(true);
+  });
+});
+
+describe('ArtworkCacheService scan cache (artwork-scan.json)', () => {
+  const RAUM_DIR = path.join(NI_PUBLIC_RESOURCES_IMAGE_BASE, 'raum');
+  const RAUM_ARTWORK = path.join(RAUM_DIR, 'MST_artwork.png');
+  const RAUM_DIR_KEY = path.normalize(RAUM_DIR).toLowerCase();
+
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const FRESH_SCAN = new Date(Date.now() - ONE_DAY_MS).toISOString();
+  const STALE_SCAN = new Date(Date.now() - 366 * ONE_DAY_MS).toISOString();
+
+  function addRaumOnDisk(): void {
+    addDir(NI_PUBLIC_RESOURCES_IMAGE_BASE, [{ name: 'raum', dir: true }]);
+    addDir(RAUM_DIR, [{ name: 'MST_artwork.png', dir: false }]);
+  }
+
+  function readDirs(): string[] {
+    return vi.mocked(fs.promises.readdir).mock.calls.map((call) => String(call[0]));
+  }
+
+  it('persists scan hits and scanned folders (with timestamp) after a scan', async () => {
+    addRaumOnDisk();
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store).service.cacheAll();
+
+    expect(scanCacheWritten).not.toBeNull();
+    const parsed = JSON.parse(scanCacheWritten as string);
+    expect(parsed.products.raum).toEqual({ filePath: RAUM_ARTWORK, priority: 0 });
+    const scannedAt = Date.parse(parsed.scannedFolders[RAUM_DIR_KEY]);
+    expect(Date.now() - scannedAt).toBeLessThan(60_000); // stamped with "now"
+  });
+
+  it('skips freshly scanned folders (and their subfolders) and reuses the remembered hits', async () => {
+    addRaumOnDisk();
+    existingFiles.add(path.normalize(RAUM_ARTWORK)); // remembered hit still valid
+    scanCacheContent = JSON.stringify({
+      version: 2,
+      products: { raum: { filePath: RAUM_ARTWORK, priority: 0 } },
+      scannedFolders: { [RAUM_DIR_KEY]: FRESH_SCAN },
+    });
+
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store).service.cacheAll();
+
+    // Folder scanned recently → not read again…
+    expect(readDirs()).not.toContain(RAUM_DIR);
+    // …but its remembered artwork is still used, and its timestamp survives.
+    expect(copies).toEqual([[RAUM_ARTWORK, path.join(CACHE, 'Raum.png')]]);
+    const parsed = JSON.parse(scanCacheWritten as string);
+    expect(parsed.scannedFolders[RAUM_DIR_KEY]).toBe(FRESH_SCAN);
+  });
+
+  it('rescans a folder whose scan is older than the max age (365 days)', async () => {
+    addRaumOnDisk();
+    scanCacheContent = JSON.stringify({
+      version: 2,
+      products: {},
+      scannedFolders: { [RAUM_DIR_KEY]: STALE_SCAN },
+    });
+
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store).service.cacheAll();
+
+    expect(readDirs()).toContain(RAUM_DIR); // walked again
+    expect(copies).toEqual([[RAUM_ARTWORK, path.join(CACHE, 'Raum.png')]]);
+    const parsed = JSON.parse(scanCacheWritten as string);
+    expect(Date.parse(parsed.scannedFolders[RAUM_DIR_KEY])).toBeGreaterThan(
+      Date.parse(STALE_SCAN),
+    ); // stamped anew
+  });
+
+  it('"Do always full artwork scan" ignores the scanned-folders cache', async () => {
+    addRaumOnDisk();
+    scanCacheContent = JSON.stringify({
+      version: 2,
+      products: {},
+      scannedFolders: { [RAUM_DIR_KEY]: FRESH_SCAN },
+    });
+
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store, {}, false, true).service.cacheAll();
+
+    expect(readDirs()).toContain(RAUM_DIR); // fresh entry ignored
+    expect(copies).toEqual([[RAUM_ARTWORK, path.join(CACHE, 'Raum.png')]]);
+  });
+
+  it('host image dirs are own bases: scanned even when their host folder is marked scanned', async () => {
+    const K8_DIR = path.join(NI_COMMON_FILES_BASE, 'Kontakt 8');
+    const K8_IMAGE_BASE = path.join(K8_DIR, 'PAResources', 'image');
+    addDir(NI_COMMON_FILES_BASE, [{ name: 'Kontakt 8', dir: true }]);
+    addDir(K8_IMAGE_BASE, [{ name: 'raum', dir: true }]);
+    addDir(path.join(K8_IMAGE_BASE, 'raum'), [{ name: 'MST_artwork.png', dir: false }]);
+    // "Kontakt 8" itself is covered by a fresh scan…
+    scanCacheContent = JSON.stringify({
+      version: 2,
+      products: {},
+      scannedFolders: { [path.normalize(K8_DIR).toLowerCase()]: FRESH_SCAN },
+    });
+
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store).service.cacheAll();
+
+    // …so its subtree is skipped, but the image dir is its own base and gets walked.
+    expect(readDirs()).not.toContain(K8_DIR);
+    expect(readDirs()).toContain(K8_IMAGE_BASE);
+    expect(copies).toEqual([
+      [path.join(K8_IMAGE_BASE, 'raum', 'MST_artwork.png'), path.join(CACHE, 'Raum.png')],
+    ]);
+    // The image dir's subfolder is tracked as its own scanned unit.
+    const parsed = JSON.parse(scanCacheWritten as string);
+    expect(parsed.scannedFolders[path.normalize(path.join(K8_IMAGE_BASE, 'raum')).toLowerCase()])
+      .toBeDefined();
+  });
+
+  it('falls back to a full scan when the cache file is corrupt', async () => {
+    addRaumOnDisk();
+    scanCacheContent = '{not json';
+
+    const store = new ProductStore();
+    store.replaceAll([makeProduct('Raum')]);
+    await makeService(store).service.cacheAll();
+
+    expect(copies).toEqual([[RAUM_ARTWORK, path.join(CACHE, 'Raum.png')]]);
+    expect(scanCacheWritten).not.toBeNull(); // rewritten with the fresh results
   });
 });
 

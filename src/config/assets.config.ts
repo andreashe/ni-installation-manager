@@ -21,3 +21,17 @@ export const CACHED_ARTWORK_SIZE = { width: 134, height: 66 } as const;
 
 /** Abort a CDN artwork download when it takes longer than this. */
 export const ARTWORK_DOWNLOAD_TIMEOUT_MS = 3000;
+
+/**
+ * Scan-result cache file inside the frontend assets cache folder: remembers
+ * the artwork hits AND which base subfolders were already scanned (with
+ * timestamp), so the next scan can skip them including their subfolders.
+ * Removed together with the folder by Preferences → "Clear cache".
+ */
+export const ARTWORK_SCAN_CACHE_FILE_NAME = 'artwork-scan.json';
+
+/**
+ * A folder recorded as scanned is skipped by later artwork scans until its
+ * scan is older than this; then it is walked (and stamped) again.
+ */
+export const ARTWORK_SCAN_MAX_AGE_DAYS = 365;

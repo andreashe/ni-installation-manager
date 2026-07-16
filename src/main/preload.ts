@@ -84,6 +84,9 @@ const api: WindowApi = {
   dialog: {
     selectFolder: (): Promise<string | null> => ipcRenderer.invoke(IpcChannels.dialog.selectFolder),
   },
+  app: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke(IpcChannels.app.getVersion),
+  },
   cache: {
     clear: (): Promise<void> => ipcRenderer.invoke(IpcChannels.cache.clear),
   },

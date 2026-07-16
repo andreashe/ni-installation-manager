@@ -32,12 +32,16 @@ C:\Users\Public\Documents\NI Resources\image\       (recursive)
 
 Every folder directly containing an artwork candidate (`MST_artwork.png` preferred, then `MST_logo.png`, `VB_artwork.png`; matched case-insensitively) names one product: lower-cased folder name → artwork path map. The parent folder may be a vendor prefix, so the same file is additionally registered as `<parent>-<folder>` — `image\arturia\acid v\…` fits both "Acid V" and "Arturia-Acid V".
 
+**Scan cache**: after each scan, `userData/assets-cache/artwork-scan.json` (`ARTWORK_SCAN_CACHE_FILE_NAME` in `src/config/assets.config.ts`) stores the artwork hits (product key → `{ filePath, priority }`) plus every scanned **direct base subfolder** with the timestamp of the scan (`scannedFolders`). The next scan skips folders — including their subfolders — scanned less than `ARTWORK_SCAN_MAX_AGE_DAYS` (365) ago and reuses the remembered hits; older folders are walked and stamped again. The Preferences toggle **"Do always full artwork scan"** (`alwaysFullArtworkScan`) disables the skipping entirely. A missing/corrupt cache file simply means a full scan.
+
+The host image dirs from `NI_HOST_IMAGE_DIR_RULES` (`…\Kontakt 8\PAResources\image` etc.) are **own scan bases**: they are excluded from the `NI_COMMON_FILES_BASE` walk (their host folder being marked scanned does not cover them) and their direct subfolders are tracked as individual scan units.
+
 **Fallback chain** (per product, first hit wins): existing cache file → disk scan map → **CDN download** → **ContentDir wallpaper**. Cache-first means the disk scan only runs when products are still missing artwork.
 
 - *CDN:* lookup (case-insensitive) in `src/config/na_cdn-assets.json`, downloaded via `ArtworkImageProcessor` (`src/main/utils/`, Electron `net` + `nativeImage`, 3 s timeout), cover-cropped centered to 134×66 (`CACHED_ARTWORK_SIZE`, never squeezed). Failures are logged and skipped.
 - *Wallpaper:* `<ContentDir>\wallpaper.png` — copied to a temp file, proportionally resized to 66 px height, then LEFT-cropped to 134×66.
 
-Preferences offers a **Clear cache** button (`cache:clear` IPC → `ArtworkCacheService.clearCache`) that wipes the cache folder and resets all artwork references. Products are looked up in that map case-insensitively and hits are copied into the **frontend assets cache**; the status bar shows the directory being scanned and the product being copied. Products without any artwork show the bundled alternative image `src/renderer/assets/MST_artwork_alt.png`.
+Preferences offers a **Clear cache** button (`cache:clear` IPC → `ArtworkCacheService.clearCache`) that wipes the cache folder — including `artwork-scan.json`, so the next reload runs a full artwork scan — and resets all artwork references. Products are looked up in that map case-insensitively and hits are copied into the **frontend assets cache**; the status bar shows the directory being scanned and the product being copied. Products without any artwork show the bundled alternative image `src/renderer/assets/MST_artwork_alt.png`.
 
 ## App-owned locations (under `app.getPath('userData')`)
 
